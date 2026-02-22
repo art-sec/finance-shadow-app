@@ -52,22 +52,22 @@ type ChartPoint = {
 };
 
 /**
- * Dados padrão (exemplo) para 12 meses
- * Estes dados são combinados com os dados salvos no Firestore
+ * Template vazio para 12 meses
+ * O usuário preenche com seus próprios dados
  */
-const DATA: MonthlyData[] = [
-  { month: 'Jan', faturamento: 120000, anuncios: 35000, funcionarios: 18000 },
-  { month: 'Fev', faturamento: 98000, anuncios: 30000, funcionarios: 18000 },
-  { month: 'Mar', faturamento: 142000, anuncios: 42000, funcionarios: 19000 },
-  { month: 'Abr', faturamento: 110000, anuncios: 36000, funcionarios: 18500 },
-  { month: 'Mai', faturamento: 150000, anuncios: 48000, funcionarios: 20000 },
-  { month: 'Jun', faturamento: 132000, anuncios: 41000, funcionarios: 19500 },
-  { month: 'Jul', faturamento: 126000, anuncios: 39000, funcionarios: 19000 },
-  { month: 'Ago', faturamento: 158000, anuncios: 52000, funcionarios: 21000 },
-  { month: 'Set', faturamento: 144000, anuncios: 47000, funcionarios: 20500 },
-  { month: 'Out', faturamento: 165000, anuncios: 54000, funcionarios: 22000 },
-  { month: 'Nov', faturamento: 172000, anuncios: 56000, funcionarios: 22500 },
-  { month: 'Dez', faturamento: 190000, anuncios: 60000, funcionarios: 23000 },
+const DATA_EMPTY: MonthlyData[] = [
+  { month: 'Jan', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Fev', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Mar', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Abr', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Mai', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Jun', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Jul', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Ago', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Set', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Out', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Nov', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Dez', faturamento: 0, anuncios: 0, funcionarios: 0 },
 ];
 
 /**
@@ -101,8 +101,8 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
   // Mês selecionado para edição
   const [selectedMonth, setSelectedMonth] = useState('Jan');
   
-  // Dados mensais (inicializa com dados padrão)
-  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>(DATA);
+  // Dados mensais (inicializa vazio para o usuário preencher)
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>(DATA_EMPTY);
   
   // Indica se está carregando dados do Firestore
   const [loadingData, setLoadingData] = useState(false);
@@ -193,8 +193,8 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         
         if (snapshot.empty) {
           console.warn('Nenhum dado salvo no Firestore para este usuário.');
-          // Se não há dados, usa padrão
-          setMonthlyData(DATA);
+          // Se não há dados, usa template vazio
+          setMonthlyData(DATA_EMPTY);
         } else {
           // Criar mapa dos dados por mês
           const map = new Map(snapshot.docs.map((docItem) => [docItem.id, docItem.data()]));
@@ -224,8 +224,8 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
-        setSaveMessage('Falha ao carregar dados do Firestore. Usando dados padrão.');
-        setMonthlyData(DATA);
+        setSaveMessage('Falha ao carregar dados do Firestore. Formulário vazio.');
+        setMonthlyData(DATA_EMPTY);
       } finally {
         if (mounted) {
           setLoadingData(false);
