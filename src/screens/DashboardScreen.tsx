@@ -1,3 +1,21 @@
+/**
+ * Dashboard Screen - Painel Financeiro Principal
+ * 
+ * Este componente mostra:
+ * - Resumo de dados financeiros mensais
+ * - Gráficos de tendências
+ * - Formulário para editar dados
+ * - Sincronização com Firestore
+ * 
+ * Funcionalidades:
+ * - Carrega dados do Firestore (coleção 'finance')
+ * - Permite editar faturamento, anúncios, funcionários
+ * - Calcula total automaticamente
+ * - Sincroniza alterações com banco de dados
+ * - Responsivo para diferentes tamanhos de tela
+ * - Anima elementos ao carregar
+ */
+
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -15,19 +33,29 @@ import { collection, doc, getDocs, serverTimestamp, setDoc } from 'firebase/fire
 import { auth, db } from '../firebase/config';
 import LineChart from '../components/LineChart';
 
+/**
+ * Tipo para dados de um mês específico
+ */
 type MonthlyData = {
   month: string;
-  faturamento: number;
-  anuncios: number;
-  funcionarios: number;
-  faturamentoTotal: number;
+  faturamento: number;        // Receita/Faturamento
+  anuncios: number;           // Gastos com anúncios
+  funcionarios: number;       // Gastos com funcionários
+  faturamentoTotal: number;   // Total = Faturamento - Anúncios - Funcionários
 };
 
+/**
+ * Tipo para um ponto no gráfico
+ */
 type ChartPoint = {
   label: string;
   value: number;
 };
 
+/**
+ * Dados padrão (exemplo) para 12 meses
+ * Estes dados são combinados com os dados salvos no Firestore
+ */
 const DATA: MonthlyData[] = [
   { month: 'Jan', faturamento: 120000, anuncios: 35000, funcionarios: 18000, faturamentoTotal: 132000 },
   { month: 'Fev', faturamento: 98000, anuncios: 30000, funcionarios: 18000, faturamentoTotal: 105000 },
@@ -43,6 +71,10 @@ const DATA: MonthlyData[] = [
   { month: 'Dez', faturamento: 190000, anuncios: 60000, funcionarios: 23000, faturamentoTotal: 212000 },
 ];
 
+/**
+ * Formata um número como moeda BRL
+ * Ex: 120000 -> "R$ 120.000"
+ */
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat('pt-BR', {
     style: 'currency',
@@ -50,37 +82,80 @@ const formatCurrency = (value: number) =>
     maximumFractionDigits: 0,
   }).format(value);
 
+/**
+ * Formata um número como razão
+ * Ex: 1.5 -> "1.50x"
+ */
 const formatRatio = (value: number) => `${value.toFixed(2)}x`;
 
+/**
+ * Props do componente
+ */
 type Props = {
-  userEmail?: string | null;
-  userId?: string | null;
+  userEmail?: string | null;    // Email do usuário logado
+  userId?: string | null;       // ID do usuário (UID do Firebase)
 };
 
 export default function DashboardScreen({ userEmail, userId }: Props) {
+  // ===== ESTADOS =====
+  
+  // Mês selecionado para edição
   const [selectedMonth, setSelectedMonth] = useState('Jan');
+  
+  // Dados mensais (inicializa com dados padrão)
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>(DATA);
+  
+  // Indica se está carregando dados do Firestore
   const [loadingData, setLoadingData] = useState(false);
+  
+  // Indica se está salvando dados no Firestore
   const [saving, setSaving] = useState(false);
+  
+  // Mensagem de sucesso ao salvar
   const [saveMessage, setSaveMessage] = useState('');
+  
+  // Erros de validação do formulário
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof MonthlyData, string>>>({});
+  
+  // ===== DIMENSÕES E LAYOUT =====
+  
+  // Largura da tela atual
   const { width } = useWindowDimensions();
+  
+  // Tela estreita: < 700px (mobile)
   const isNarrow = width < 700;
+  
+  // Largura máxima do conteúdo
   const maxContentWidth = 1100;
+  
+  // Número de colunas para cards (1, 2 ou 3)
   const columns = width >= 1100 ? 3 : width >= 720 ? 2 : 1;
+  
+  // Largura disponível para conteúdo
   const availableWidth = Math.min(width, maxContentWidth) - 40;
+  
+  // Largura de cada card
   const cardWidth = columns === 1
     ? '100%'
     : (availableWidth - (columns - 1) * 12) / columns;
 
+  // Número de colunas para gráficos
   const chartColumns = width >= 900 ? 2 : 1;
+  
+  // Largura de cada gráfico
   const chartWidth = chartColumns === 1
     ? '100%'
     : (availableWidth - (chartColumns - 1) * 16) / chartColumns;
 
+  // ===== ANIMAÇÕES =====
+  
+  // Animação de opacidade para fade-in
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  
+  // Animação de movimento para slide-in
   const slideAnim = useRef(new Animated.Value(16)).current;
 
+  // Hook: Executar animações ao montar
   useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, {
@@ -96,6 +171,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
     ]).start();
   }, [fadeAnim, slideAnim]);
 
+  // Hook: Carregar dados do Firestore quando userId muda
   useEffect(() => {
     if (!userId) {
       return;
@@ -107,12 +183,15 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
       setLoadingData(true);
       setSaveMessage('');
       try {
+        // Buscar docs da coleção 'finance' do usuário
         const snapshot = await getDocs(collection(db, 'users', userId, 'finance'));
         if (!mounted) {
           return;
         }
         if (!snapshot.empty) {
+          // Criar mapa dos dados por mês
           const map = new Map(snapshot.docs.map((docItem) => [docItem.id, docItem.data()]));
+          // Mesclar dados salvos com dados padrão
           setMonthlyData((prev) =>
             prev.map((item) => {
               const data = map.get(item.month) as Partial<MonthlyData> | undefined;
