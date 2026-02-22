@@ -41,6 +41,7 @@ type MonthlyData = {
   faturamento: number;        // Receita/Faturamento
   anuncios: number;           // Gastos com anúncios
   funcionarios: number;       // Gastos com funcionários
+  retornoAnuncios: number;    // Retorno financeiro dos anúncios
 };
 
 /**
@@ -56,18 +57,18 @@ type ChartPoint = {
  * O usuário preenche com seus próprios dados
  */
 const DATA_EMPTY: MonthlyData[] = [
-  { month: 'Jan', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Fev', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Mar', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Abr', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Mai', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Jun', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Jul', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Ago', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Set', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Out', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Nov', faturamento: 0, anuncios: 0, funcionarios: 0 },
-  { month: 'Dez', faturamento: 0, anuncios: 0, funcionarios: 0 },
+  { month: 'Jan', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Fev', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Mar', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Abr', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Mai', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Jun', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Jul', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Ago', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Set', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Out', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Nov', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
+  { month: 'Dez', faturamento: 0, anuncios: 0, funcionarios: 0, retornoAnuncios: 0 },
 ];
 
 /**
@@ -211,6 +212,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
               const faturamento = Number(data.faturamento ?? item.faturamento);
               const anuncios = Number(data.anuncios ?? item.anuncios);
               const funcionarios = Number(data.funcionarios ?? item.funcionarios);
+              const retornoAnuncios = Number(data.retornoAnuncios ?? item.retornoAnuncios);
               
               // Validar e corrigir valores inválidos
               return {
@@ -218,6 +220,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
                 faturamento: Number.isFinite(faturamento) ? faturamento : item.faturamento,
                 anuncios: Number.isFinite(anuncios) ? anuncios : item.anuncios,
                 funcionarios: Number.isFinite(funcionarios) ? funcionarios : item.funcionarios,
+                retornoAnuncios: Number.isFinite(retornoAnuncios) ? retornoAnuncios : item.retornoAnuncios,
               };
             })
           );
@@ -246,12 +249,12 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
 
   const custoTotal = currentData.anuncios + currentData.funcionarios;
   const lucroLiquido = currentData.faturamento - custoTotal;
-  const retorno = currentData.anuncios > 0 ? currentData.faturamento / currentData.anuncios : 0;
+  const roas = currentData.anuncios > 0 ? currentData.retornoAnuncios / currentData.anuncios : 0;
 
   const metrics = [
     { label: 'Faturamento', value: formatCurrency(currentData.faturamento) },
     { label: 'Gasto com anuncios', value: formatCurrency(currentData.anuncios) },
-    { label: 'Retorno (ROAS)', value: formatRatio(retorno) },
+    { label: 'Retorno dos ads (ROAS)', value: formatRatio(roas) },
     { label: 'Gasto com funcionarios', value: formatCurrency(currentData.funcionarios) },
     { label: 'Lucro liquido', value: formatCurrency(lucroLiquido) },
     { label: 'Custo total', value: formatCurrency(custoTotal) },
@@ -263,6 +266,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
       'faturamento',
       'anuncios',
       'funcionarios',
+      'retornoAnuncios',
     ];
 
     fields.forEach((field) => {
@@ -387,10 +391,10 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
 
   const roasSeries: ChartPoint[] = monthlyData
     .map((item) => {
-      // Evita divisão por zero no cálculo de ROAS
+      // Calcula ROAS a partir do retorno dos anúncios
       let roas = 0;
-      if (Number.isFinite(item.anuncios) && Number.isFinite(item.faturamento) && item.anuncios > 0) {
-        roas = item.faturamento / item.anuncios;
+      if (Number.isFinite(item.anuncios) && Number.isFinite(item.retornoAnuncios) && item.anuncios > 0) {
+        roas = item.retornoAnuncios / item.anuncios;
       }
       return {
         label: item.month,
@@ -510,6 +514,20 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
                 />
                 {formErrors.anuncios ? (
                   <Text style={styles.errorText}>{formErrors.anuncios}</Text>
+                ) : null}
+              </View>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Retorno dos anuncios</Text>
+                <TextInput
+                  keyboardType="numeric"
+                  placeholder="0"
+                  placeholderTextColor="#8C8FB3"
+                  style={styles.input}
+                  value={String(currentData.retornoAnuncios)}
+                  onChangeText={(value) => updateField('retornoAnuncios', value)}
+                />
+                {formErrors.retornoAnuncios ? (
+                  <Text style={styles.errorText}>{formErrors.retornoAnuncios}</Text>
                 ) : null}
               </View>
             </View>
