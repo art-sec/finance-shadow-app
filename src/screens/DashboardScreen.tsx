@@ -117,6 +117,9 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
   // Erros de validação do formulário
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof MonthlyData, string>>>({});
   
+  // Trigger para recarregar dados após salvar
+  const [reloadTrigger, setReloadTrigger] = useState(0);
+  
   // ===== DIMENSÕES E LAYOUT =====
   
   // Largura da tela atual
@@ -188,9 +191,15 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         if (!mounted) {
           return;
         }
-        if (!snapshot.empty) {
+        
+        if (snapshot.empty) {
+          console.warn('Nenhum dado salvo no Firestore para este usuário.');
+          // Se não há dados, usa padrão
+          setMonthlyData(DATA);
+        } else {
           // Criar mapa dos dados por mês
           const map = new Map(snapshot.docs.map((docItem) => [docItem.id, docItem.data()]));
+          
           // Mesclar dados salvos com dados padrão
           setMonthlyData((prev) =>
             prev.map((item) => {
@@ -198,6 +207,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
               if (!data) {
                 return item;
               }
+              
               // Garantir que todos os valores são números válidos
               const faturamento = Number(data.faturamento ?? item.faturamento);
               const anuncios = Number(data.anuncios ?? item.anuncios);
@@ -217,7 +227,8 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
-        setSaveMessage('Falha ao carregar dados do Firestore.');
+        setSaveMessage('Falha ao carregar dados do Firestore. Usando dados padrão.');
+        setMonthlyData(DATA);
       } finally {
         if (mounted) {
           setLoadingData(false);
@@ -230,7 +241,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
     return () => {
       mounted = false;
     };
-  }, [userId]);
+  }, [userId, reloadTrigger]);
 
   const currentData = useMemo(() => {
     return monthlyData.find((item) => item.month === selectedMonth) ?? monthlyData[0];
@@ -294,7 +305,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
 
   const handleSave = async () => {
     if (!userId) {
-      setSaveMessage('Usuario nao autenticado.');
+      setSaveMessage('Usuário não autenticado.');
       return;
     }
 
@@ -307,8 +318,10 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
 
     setSaving(true);
     setSaveMessage('');
+    
     try {
-      await setDoc(
+      // Cria um promise com timeout de 15 segundos
+      const savePromise = setDoc(
         doc(db, 'users', userId, 'finance', currentData.month),
         {
           ...currentData,
@@ -316,9 +329,38 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         },
         { merge: true }
       );
-      setSaveMessage('Dados salvos com sucesso.');
-    } catch (err) {
-      setSaveMessage('Falha ao salvar no Firestore.');
+
+      // Executa save com timeout
+      await Promise.race([
+        savePromise,
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Timeout ao salvar. Verifique sua conexão.')), 15000)
+        ),
+      ]);
+
+      // Atualiza mensagem de sucesso
+      setSaveMessage('✓ Dados salvos com sucesso.');
+      console.log('Dados salvos com sucesso para:', currentData.month);
+      
+      // Recarrega dados após 1 segundo para confirmar salvamento
+      setTimeout(() => {
+        setReloadTrigger(prev => prev + 1);
+        setSaveMessage('');
+      }, 1000);
+      
+    } catch (err: any) {
+      console.error('Erro ao salvar no Firestore:', err);
+      
+      // Mensagens de erro mais específicas
+      if (err.code === 'permission-denied') {
+        setSaveMessage('Erro: Sem permissão para salvar. Faça login novamente.');
+      } else if (err.code === 'unauthenticated') {
+        setSaveMessage('Erro: Você foi desconectado. Faça login novamente.');
+      } else if (err.message?.includes('Timeout')) {
+        setSaveMessage('Erro: Conexão com banco de dados lenta ou indisponível.');
+      } else {
+        setSaveMessage(`Erro ao salvar: ${err.message || 'Tente novamente'}`);
+      }
     } finally {
       setSaving(false);
     }
