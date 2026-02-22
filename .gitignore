@@ -30,12 +30,27 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
-.env*.local
+# Environment variables - NUNCA COMMITAR
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.production.local
+.env.test.local
 
-# typescript
-*.tsbuildinfo
+# Vercel secrets
+.vercel/
 
-# generated native folders
-/ios
-/android
+# IDE
+.vscode/settings.json
+.idea/
+
+# Build outputs
+dist/
+build/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
