@@ -15,20 +15,23 @@ type Props = {
 export default function LineChart({ title, points, color }: Props) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   
-  // Filtra valores válidos (remove NaN, Infinity, etc)
-  const validPoints = useMemo(() => {
-    return points.filter(p => typeof p.value === 'number' && Number.isFinite(p.value));
+  // Usa TODOS os pontos, não filtra nada
+  const allPoints = useMemo(() => {
+    return points.map(p => ({
+      ...p,
+      value: typeof p.value === 'number' && Number.isFinite(p.value) ? p.value : 0
+    }));
   }, [points]);
 
   const maxValue = useMemo(() => {
-    if (validPoints.length === 0) return 1;
-    return Math.max(...validPoints.map((p) => p.value), 1);
-  }, [validPoints]);
+    if (allPoints.length === 0) return 1;
+    return Math.max(...allPoints.map((p) => p.value), 1);
+  }, [allPoints]);
   
   const minValue = useMemo(() => {
-    if (validPoints.length === 0) return 0;
-    return Math.min(...validPoints.map((p) => p.value), 0);
-  }, [validPoints]);
+    if (allPoints.length === 0) return 0;
+    return Math.min(...allPoints.map((p) => p.value), 0);
+  }, [allPoints]);
 
   // Calcula escala inteligente com tratamento de outliers
   const calculateOptimalScale = () => {
@@ -51,7 +54,7 @@ export default function LineChart({ title, points, color }: Props) {
     };
 
     // Se houver range muito grande (outlier extremo), ignora outlier para melhor visualização
-    const allValues = validPoints.map(p => p.value);
+    const allValues = allPoints.map(p => p.value);
     const range = maxValue - minValue || 1;
     const { lower: outlierLower, upper: outlierUpper } = getOutlierBounds(allValues);
     
@@ -111,7 +114,7 @@ export default function LineChart({ title, points, color }: Props) {
     return { yValues: yVals, minVal: calcMin, maxVal: calcMax, range: calcRange, actualMin: minValue, actualMax: maxValue };
   };
 
-  const { yValues, minVal, maxVal, range, actualMin, actualMax } = useMemo(() => calculateOptimalScale(), [maxValue, minValue, validPoints]);
+  const { yValues, minVal, maxVal, range, actualMin, actualMax } = useMemo(() => calculateOptimalScale(), [maxValue, minValue, allPoints]);
 
   // Formata números para exibição legível
   const formatNumber = (num: number) => {
@@ -126,7 +129,7 @@ export default function LineChart({ title, points, color }: Props) {
   };
 
   // Renderiza o gráfico apenas se houver dados válidos
-  if (validPoints.length === 0) {
+  if (allPoints.length === 0) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>{title}</Text>
@@ -149,10 +152,10 @@ export default function LineChart({ title, points, color }: Props) {
   };
 
   const normalizeX = (index: number) => {
-    return (index / (validPoints.length - 1 || 1)) * chartWidth;
+    return (index / (allPoints.length - 1 || 1)) * chartWidth;
   };
 
-  const pathPoints = validPoints
+  const pathPoints = allPoints
     .map((point, index) => {
       const x = normalizeX(index) + leftPadding;
       const y = normalizeY(point.value) + padding;
@@ -194,7 +197,7 @@ export default function LineChart({ title, points, color }: Props) {
               viewBox={`0 0 ${chartWidth + leftPadding} ${chartHeight + padding + bottomPadding}`}
             >
               <polyline
-                points={validPoints
+                points={allPoints
                   .map((point, index) => {
                     const x = normalizeX(index) + leftPadding;
                     const y = normalizeY(point.value) + padding;
@@ -207,7 +210,7 @@ export default function LineChart({ title, points, color }: Props) {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {validPoints.map((point, index) => {
+              {allPoints.map((point, index) => {
                 const x = normalizeX(index) + leftPadding;
                 const y = normalizeY(point.value) + padding;
                 
@@ -294,12 +297,12 @@ export default function LineChart({ title, points, color }: Props) {
           </View>
 
           <View style={styles.xAxis}>
-            {validPoints.map((point, index) => (
+            {allPoints.map((point, index) => (
               <View
                 key={index}
                 style={[
                   styles.xLabelContainer,
-                  { width: chartWidth / (validPoints.length - 1 || 1) },
+                  { width: chartWidth / (allPoints.length - 1 || 1) },
                 ]}
               >
                 <Text style={styles.xLabel}>{point.label}</Text>
