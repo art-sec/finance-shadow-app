@@ -41,7 +41,6 @@ type MonthlyData = {
   faturamento: number;        // Receita/Faturamento
   anuncios: number;           // Gastos com anúncios
   funcionarios: number;       // Gastos com funcionários
-  faturamentoTotal: number;   // Total = Faturamento - Anúncios - Funcionários
 };
 
 /**
@@ -57,18 +56,18 @@ type ChartPoint = {
  * Estes dados são combinados com os dados salvos no Firestore
  */
 const DATA: MonthlyData[] = [
-  { month: 'Jan', faturamento: 120000, anuncios: 35000, funcionarios: 18000, faturamentoTotal: 132000 },
-  { month: 'Fev', faturamento: 98000, anuncios: 30000, funcionarios: 18000, faturamentoTotal: 105000 },
-  { month: 'Mar', faturamento: 142000, anuncios: 42000, funcionarios: 19000, faturamentoTotal: 155000 },
-  { month: 'Abr', faturamento: 110000, anuncios: 36000, funcionarios: 18500, faturamentoTotal: 118000 },
-  { month: 'Mai', faturamento: 150000, anuncios: 48000, funcionarios: 20000, faturamentoTotal: 168000 },
-  { month: 'Jun', faturamento: 132000, anuncios: 41000, funcionarios: 19500, faturamentoTotal: 142000 },
-  { month: 'Jul', faturamento: 126000, anuncios: 39000, funcionarios: 19000, faturamentoTotal: 134000 },
-  { month: 'Ago', faturamento: 158000, anuncios: 52000, funcionarios: 21000, faturamentoTotal: 176000 },
-  { month: 'Set', faturamento: 144000, anuncios: 47000, funcionarios: 20500, faturamentoTotal: 159000 },
-  { month: 'Out', faturamento: 165000, anuncios: 54000, funcionarios: 22000, faturamentoTotal: 184000 },
-  { month: 'Nov', faturamento: 172000, anuncios: 56000, funcionarios: 22500, faturamentoTotal: 196000 },
-  { month: 'Dez', faturamento: 190000, anuncios: 60000, funcionarios: 23000, faturamentoTotal: 212000 },
+  { month: 'Jan', faturamento: 120000, anuncios: 35000, funcionarios: 18000 },
+  { month: 'Fev', faturamento: 98000, anuncios: 30000, funcionarios: 18000 },
+  { month: 'Mar', faturamento: 142000, anuncios: 42000, funcionarios: 19000 },
+  { month: 'Abr', faturamento: 110000, anuncios: 36000, funcionarios: 18500 },
+  { month: 'Mai', faturamento: 150000, anuncios: 48000, funcionarios: 20000 },
+  { month: 'Jun', faturamento: 132000, anuncios: 41000, funcionarios: 19500 },
+  { month: 'Jul', faturamento: 126000, anuncios: 39000, funcionarios: 19000 },
+  { month: 'Ago', faturamento: 158000, anuncios: 52000, funcionarios: 21000 },
+  { month: 'Set', faturamento: 144000, anuncios: 47000, funcionarios: 20500 },
+  { month: 'Out', faturamento: 165000, anuncios: 54000, funcionarios: 22000 },
+  { month: 'Nov', faturamento: 172000, anuncios: 56000, funcionarios: 22500 },
+  { month: 'Dez', faturamento: 190000, anuncios: 60000, funcionarios: 23000 },
 ];
 
 /**
@@ -212,7 +211,6 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
               const faturamento = Number(data.faturamento ?? item.faturamento);
               const anuncios = Number(data.anuncios ?? item.anuncios);
               const funcionarios = Number(data.funcionarios ?? item.funcionarios);
-              const faturamentoTotal = Number(data.faturamentoTotal ?? item.faturamentoTotal);
               
               // Validar e corrigir valores inválidos
               return {
@@ -220,7 +218,6 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
                 faturamento: Number.isFinite(faturamento) ? faturamento : item.faturamento,
                 anuncios: Number.isFinite(anuncios) ? anuncios : item.anuncios,
                 funcionarios: Number.isFinite(funcionarios) ? funcionarios : item.funcionarios,
-                faturamentoTotal: Number.isFinite(faturamentoTotal) ? faturamentoTotal : item.faturamentoTotal,
               };
             })
           );
@@ -258,7 +255,6 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
     { label: 'Gasto com funcionarios', value: formatCurrency(currentData.funcionarios) },
     { label: 'Lucro liquido', value: formatCurrency(lucroLiquido) },
     { label: 'Custo total', value: formatCurrency(custoTotal) },
-    { label: 'Faturamento total', value: formatCurrency(currentData.faturamentoTotal) },
   ];
 
   const validateMonth = (data: MonthlyData) => {
@@ -267,7 +263,6 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
       'faturamento',
       'anuncios',
       'funcionarios',
-      'faturamentoTotal',
     ];
 
     fields.forEach((field) => {
@@ -278,10 +273,6 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         errors[field] = 'Valor muito alto. Use ate 1 bilhao.';
       }
     });
-
-    if (data.faturamentoTotal < data.faturamento) {
-      errors.faturamentoTotal = 'Faturamento total deve ser maior ou igual ao faturamento.';
-    }
 
     return errors;
   };
@@ -541,20 +532,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
                   <Text style={styles.errorText}>{formErrors.funcionarios}</Text>
                 ) : null}
               </View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Faturamento total</Text>
-                <TextInput
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor="#8C8FB3"
-                  style={styles.input}
-                  value={String(currentData.faturamentoTotal)}
-                  onChangeText={(value) => updateField('faturamentoTotal', value)}
-                />
-                {formErrors.faturamentoTotal ? (
-                  <Text style={styles.errorText}>{formErrors.faturamentoTotal}</Text>
-                ) : null}
-              </View>
+
             </View>
 
             {saveMessage ? <Text style={styles.saveMessage}>{saveMessage}</Text> : null}
