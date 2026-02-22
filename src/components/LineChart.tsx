@@ -69,6 +69,15 @@ export default function LineChart({ title, points, color }: Props) {
       displayMax = outlierUpper;
     }
     
+    // Quando todos os valores são iguais (ex: todos 0), cria um range mínimo útil
+    if (displayMax === displayMin) {
+      if (displayMax === 0) {
+        displayMax = 10; // Se tudo é 0, mostra escala 0-10
+      } else {
+        displayMax = displayMax * 1.5; // 50% acima do valor único
+      }
+    }
+    
     // Sempre adiciona padding (10% acima e abaixo)
     const displayRange = Math.max(displayMax - displayMin, 1);
     const padding = displayRange * 0.1;
