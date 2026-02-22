@@ -129,17 +129,18 @@ export default function LineChart({ title, points, color }: Props) {
   }
 
   // Dimensões aumentadas para melhor legibilidade
-  const chartHeight = 280;
-  const chartWidth = 380;
-  const padding = 50;
-  const leftPadding = 70;
+  const chartHeight = 240;
+  const chartWidth = 300;
+  const padding = 40;
+  const leftPadding = 0;
+  const bottomPadding = 40;
 
   const normalizeY = (value: number) => {
     return chartHeight - ((value - minVal) / range) * chartHeight;
   };
 
   const normalizeX = (index: number) => {
-    return (index / (validPoints.length - 1 || 1)) * (chartWidth - padding * 2);
+    return (index / (validPoints.length - 1 || 1)) * chartWidth;
   };
 
   const pathPoints = validPoints
@@ -170,7 +171,7 @@ export default function LineChart({ title, points, color }: Props) {
                 style={[
                   styles.gridLine,
                   {
-                    bottom: (i / (yValues.length - 1)) * chartHeight,
+                    bottom: (i / (yValues.length - 1 || 1)) * chartHeight,
                     opacity: i === 0 ? 0.3 : 0.15,
                   },
                 ]}
@@ -178,9 +179,10 @@ export default function LineChart({ title, points, color }: Props) {
             ))}
 
             <svg
-              width={chartWidth}
-              height={chartHeight + padding * 2}
+              width={chartWidth + leftPadding}
+              height={chartHeight + padding + bottomPadding}
               style={styles.svg}
+              viewBox={`0 0 ${chartWidth + leftPadding} ${chartHeight + padding + bottomPadding}`}
             >
               <polyline
                 points={validPoints
@@ -199,6 +201,22 @@ export default function LineChart({ title, points, color }: Props) {
               {validPoints.map((point, index) => {
                 const x = normalizeX(index) + leftPadding;
                 const y = normalizeY(point.value) + padding;
+                
+                // Calcula posição do tooltip para não sair da tela
+                const tooltipWidth = 100;
+                const tooltipHeight = 50;
+                let tooltipX = x - tooltipWidth / 2;
+                let tooltipY = y - tooltipHeight - 15;
+                
+                // Ajusta se tooltip sair para esquerda
+                if (tooltipX < 10) tooltipX = 10;
+                // Ajusta se tooltip sair para direita
+                if (tooltipX + tooltipWidth > chartWidth + leftPadding - 10) {
+                  tooltipX = chartWidth + leftPadding - tooltipWidth - 10;
+                }
+                // Ajusta se tooltip sair para cima
+                if (tooltipY < 5) tooltipY = y + 15;
+                
                 return (
                   <g
                     key={index}
@@ -222,10 +240,10 @@ export default function LineChart({ title, points, color }: Props) {
                       <g>
                         {/* Tooltip background */}
                         <rect
-                          x={x - 60}
-                          y={y - 60}
-                          width="120"
-                          height="50"
+                          x={tooltipX}
+                          y={tooltipY}
+                          width={tooltipWidth}
+                          height={tooltipHeight}
                           fill="#0E1026"
                           stroke={color}
                           strokeWidth="2"
@@ -233,11 +251,11 @@ export default function LineChart({ title, points, color }: Props) {
                         />
                         {/* Tooltip text - label */}
                         <text
-                          x={x}
-                          y={y - 40}
+                          x={tooltipX + tooltipWidth / 2}
+                          y={tooltipY + 18}
                           textAnchor="middle"
                           fill="#E5E2FF"
-                          fontSize="12"
+                          fontSize="11"
                           fontWeight="600"
                           fontFamily="monospace"
                         >
@@ -245,17 +263,17 @@ export default function LineChart({ title, points, color }: Props) {
                         </text>
                         {/* Tooltip text - value */}
                         <text
-                          x={x}
-                          y={y - 22}
+                          x={tooltipX + tooltipWidth / 2}
+                          y={tooltipY + 35}
                           textAnchor="middle"
                           fill={color}
-                          fontSize="14"
+                          fontSize="13"
                           fontWeight="700"
                           fontFamily="monospace"
                         >
                           {point.value.toLocaleString('pt-BR', {
                             minimumFractionDigits: 0,
-                            maximumFractionDigits: 2,
+                            maximumFractionDigits: 0,
                           })}
                         </text>
                       </g>
@@ -306,23 +324,26 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   yAxis: {
-    width: 70,
-    height: 330,
+    width: 50,
+    height: 240,
     justifyContent: 'space-between',
     paddingVertical: 8,
+    paddingRight: 8,
+    alignItems: 'flex-end',
   },
   yLabel: {
     color: '#A9ACD9',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     fontFamily: 'monospace',
+    textAlign: 'right',
   },
   chartContent: {
     flex: 1,
   },
   gridContainer: {
     position: 'relative',
-    width: 280,
+    width: 300,
     height: 240,
     backgroundColor: '#0E1026',
     borderRadius: 12,
@@ -345,8 +366,9 @@ const styles = StyleSheet.create({
   },
   xAxis: {
     flexDirection: 'row',
-    marginTop: 8,
-    paddingHorizontal: 8,
+    marginTop: 4,
+    width: 300,
+    height: 30,
   },
   xLabelContainer: {
     alignItems: 'center',
