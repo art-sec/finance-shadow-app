@@ -198,17 +198,25 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
               if (!data) {
                 return item;
               }
+              // Garantir que todos os valores são números válidos
+              const faturamento = Number(data.faturamento ?? item.faturamento);
+              const anuncios = Number(data.anuncios ?? item.anuncios);
+              const funcionarios = Number(data.funcionarios ?? item.funcionarios);
+              const faturamentoTotal = Number(data.faturamentoTotal ?? item.faturamentoTotal);
+              
+              // Validar e corrigir valores inválidos
               return {
                 ...item,
-                faturamento: Number(data.faturamento ?? item.faturamento),
-                anuncios: Number(data.anuncios ?? item.anuncios),
-                funcionarios: Number(data.funcionarios ?? item.funcionarios),
-                faturamentoTotal: Number(data.faturamentoTotal ?? item.faturamentoTotal),
+                faturamento: Number.isFinite(faturamento) ? faturamento : item.faturamento,
+                anuncios: Number.isFinite(anuncios) ? anuncios : item.anuncios,
+                funcionarios: Number.isFinite(funcionarios) ? funcionarios : item.funcionarios,
+                faturamentoTotal: Number.isFinite(faturamentoTotal) ? faturamentoTotal : item.faturamentoTotal,
               };
             })
           );
         }
       } catch (err) {
+        console.error('Erro ao carregar dados:', err);
         setSaveMessage('Falha ao carregar dados do Firestore.');
       } finally {
         if (mounted) {
@@ -331,10 +339,14 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
     value: item.faturamento - (item.anuncios + item.funcionarios),
   }));
 
-  const roasSeries: ChartPoint[] = monthlyData.map((item) => ({
-    label: item.month,
-    value: item.anuncios > 0 ? item.faturamento / item.anuncios : 0,
-  }));
+  const roasSeries: ChartPoint[] = monthlyData.map((item) => {
+    // Evita divisão por zero no cálculo de ROAS
+    const roas = item.anuncios > 0 ? item.faturamento / item.anuncios : 0;
+    return {
+      label: item.month,
+      value: Number.isFinite(roas) ? roas : 0,
+    };
+  });
 
   return (
     <View style={styles.screen}>
@@ -675,7 +687,7 @@ const styles = StyleSheet.create({
   },
   lineChartWrapper: {
     flex: 1,
-    minWidth: 320,
+    minWidth: 420,
   },
   form: {
     marginTop: 24,

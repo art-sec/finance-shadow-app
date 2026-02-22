@@ -61,8 +61,8 @@ export default function LoginScreen({ onRegister }: Props) {
           { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
         ]}
       >
-        <Text style={styles.title}>Finance Ops</Text>
-        <Text style={styles.subtitle}>Acesse o painel da operacao</Text>
+        <Text style={styles.title}>Shadow Finance</Text>
+        <Text style={styles.subtitle}>Acesse o painel de finanças</Text>
 
         <TextInput
           autoCapitalize="none"

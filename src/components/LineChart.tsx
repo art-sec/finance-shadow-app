@@ -17,10 +17,11 @@ export default function LineChart({ title, points, color }: Props) {
   const minValue = useMemo(() => Math.min(...points.map((p) => p.value), 0), [points]);
   const range = maxValue - minValue || 1;
 
-  const chartHeight = 200;
-  const chartWidth = 280;
-  const padding = 40;
-  const leftPadding = 50;
+  // Dimensões aumentadas para melhor legibilidade
+  const chartHeight = 280;
+  const chartWidth = 380;
+  const padding = 50;
+  const leftPadding = 70;
 
   const normalizeY = (value: number) => {
     return chartHeight - ((value - minValue) / range) * chartHeight;
@@ -86,7 +87,7 @@ export default function LineChart({ title, points, color }: Props) {
                   .join(' ')}
                 fill="none"
                 stroke={color}
-                strokeWidth="3"
+                strokeWidth="4"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
@@ -98,10 +99,10 @@ export default function LineChart({ title, points, color }: Props) {
                     key={index}
                     cx={x}
                     cy={y}
-                    r="4"
+                    r="6"
                     fill={color}
                     stroke="#0B0B1A"
-                    strokeWidth="2"
+                    strokeWidth="2.5"
                   />
                 );
               })}
@@ -136,26 +137,27 @@ const styles = StyleSheet.create({
     borderColor: '#2B2F63',
   },
   title: {
-    color: '#C7C9E6',
-    fontSize: 14,
-    fontWeight: '700',
-    marginBottom: 16,
+    color: '#E5E2FF',
+    fontSize: 16,
+    fontWeight: '800',
+    marginBottom: 20,
     textTransform: 'uppercase',
-    letterSpacing: 1.2,
+    letterSpacing: 1.5,
   },
   chartContainer: {
     flexDirection: 'row',
     gap: 8,
   },
   yAxis: {
-    width: 50,
-    height: 240,
+    width: 70,
+    height: 330,
     justifyContent: 'space-between',
     paddingVertical: 8,
   },
   yLabel: {
-    color: '#8C8FB3',
-    fontSize: 10,
+    color: '#A9ACD9',
+    fontSize: 12,
+    fontWeight: '500',
     fontFamily: 'monospace',
   },
   chartContent: {
@@ -186,13 +188,16 @@ const styles = StyleSheet.create({
   xAxis: {
     flexDirection: 'row',
     marginTop: 8,
+    paddingHorizontal: 8,
   },
   xLabelContainer: {
     alignItems: 'center',
   },
   xLabel: {
-    color: '#8C8FB3',
-    fontSize: 10,
+    color: '#A9ACD9',
+    fontSize: 12,
+    fontWeight: '500',
     textAlign: 'center',
+    fontFamily: 'monospace',
   },
 });
