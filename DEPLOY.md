@@ -45,7 +45,6 @@ Criar `vercel.json` na raiz do projeto:
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
-  "framework": "expo",
   "rewrites": [
     {
       "source": "/:path*",
@@ -58,7 +57,7 @@ Criar `vercel.json` na raiz do projeto:
 **O que faz:**
 - `buildCommand` - Comando que constrói a aplicação
 - `outputDirectory` - Pasta que será servida (gerada pelo build)
-- `rewrites` - Redireciona URLs para index.html (importante para SPA)
+- `rewrites` - Redireciona URLs para index.html (importante para Single Page App)
 
 ### 1.2 Adicionar script de build no package.json
 
