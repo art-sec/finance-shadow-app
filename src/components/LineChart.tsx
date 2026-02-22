@@ -15,108 +15,79 @@ type Props = {
 export default function LineChart({ title, points, color }: Props) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   
-  // Usa TODOS os pontos, não filtra nada
-  const allPoints = useMemo(() => {
+  // Garante que temos exatamente os dados passados, sem filtros
+  const chartData = useMemo(() => {
     return points.map(p => ({
       ...p,
       value: typeof p.value === 'number' && Number.isFinite(p.value) ? p.value : 0
     }));
   }, [points]);
 
+  // Encontra max/min apenas dentre valores reais (não zerados)
+  const realValues = useMemo(() => {
+    return chartData.filter(p => p.value > 0).map(p => p.value);
+  }, [chartData]);
+
   const maxValue = useMemo(() => {
-    if (allPoints.length === 0) return 1;
-    return Math.max(...allPoints.map((p) => p.value), 1);
-  }, [allPoints]);
-  
-  const minValue = useMemo(() => {
-    if (allPoints.length === 0) return 0;
-    return Math.min(...allPoints.map((p) => p.value), 0);
-  }, [allPoints]);
+    return realValues.length > 0 ? Math.max(...realValues) : 1;
+  }, [realValues]);
 
-  // Calcula escala inteligente com tratamento de outliers
-  const calculateOptimalScale = () => {
-    // Função auxiliar para detectar outliers usando IQR (Interquartile Range)
-    const getOutlierBounds = (values: number[]) => {
-      if (values.length < 4) return { lower: Math.min(...values), upper: Math.max(...values) };
-      
-      const sorted = [...values].sort((a, b) => a - b);
-      const q1Index = Math.floor(sorted.length * 0.25);
-      const q3Index = Math.floor(sorted.length * 0.75);
-      
-      const q1 = sorted[q1Index];
-      const q3 = sorted[q3Index];
-      const iqr = q3 - q1 || 1;
-      
-      const lowerBound = q1 - 1.5 * iqr;
-      const upperBound = q3 + 1.5 * iqr;
-      
-      return { lower: lowerBound, upper: upperBound };
-    };
+  // Calcula escala com padding
+  const { yMin, yMax, step, gridLines } = useMemo(() => {
+    if (maxValue === 0) {
+      return { yMin: 0, yMax: 10, step: 2, gridLines: [0, 2, 4, 6, 8, 10] };
+    }
 
-    // Se houver range muito grande (outlier extremo), ignora outlier para melhor visualização
-    const allValues = allPoints.map(p => p.value);
-    const range = maxValue - minValue || 1;
-    const { lower: outlierLower, upper: outlierUpper } = getOutlierBounds(allValues);
+    const yMax = maxValue * 1.2; // 20% padding acima
+    const range = yMax; // começa sempre de 0
     
-    // Define limites de visualização inteligentes
-    let displayMin = minValue;
-    let displayMax = maxValue;
-    
-    // Se há outlier extremo abaixo, tenta usar quartil inferior
-    if (minValue < outlierLower && range > outlierLower * 2) {
-      displayMin = outlierLower;
-    }
-    
-    // Se há outlier extremo acima, tenta usar quartil superior
-    if (maxValue > outlierUpper && range > outlierUpper * 0.5) {
-      displayMax = outlierUpper;
-    }
-    
-    // Quando todos os valores são iguais (ex: todos 0), cria um range mínimo útil
-    if (displayMax === displayMin) {
-      if (displayMax === 0) {
-        displayMax = 10; // Se tudo é 0, mostra escala 0-10
-      } else {
-        displayMax = displayMax * 1.5; // 50% acima do valor único
-      }
-    }
-    
-    // Sempre adiciona padding (10% acima e abaixo)
-    const displayRange = Math.max(displayMax - displayMin, 1);
-    const padding = displayRange * 0.1;
-    displayMax = displayMax + padding;
-    displayMin = Math.max(0, displayMin - padding); // Nunca vai abaixo de 0 para dados financeiros
-    
-    const finalRange = displayMax - displayMin || 1;
-    
-    // Define steps redondos para diferentes escalas
+    // Calcula step inteligente
     let step = 1;
-    if (finalRange > 1000) {
-      step = Math.pow(10, Math.floor(Math.log10(finalRange)) - 1);
-      step = Math.ceil(finalRange / 5 / step) * step;
-    } else if (finalRange > 100) {
-      step = Math.ceil(finalRange / 5 / 10) * 10;
-    } else if (finalRange > 10) {
-      step = Math.ceil(finalRange / 5);
+    if (range > 1000) {
+      step = Math.pow(10, Math.floor(Math.log10(range)) - 1);
+      step = Math.ceil(range / 5 / step) * step;
+    } else if (range > 100) {
+      step = Math.ceil(range / 5 / 10) * 10;
+    } else if (range > 10) {
+      step = Math.ceil(range / 5);
     }
 
-    // Calcula valores com step redondo
-    const calcMin = Math.floor(displayMin / step) * step;
-    const calcMax = Math.ceil(displayMax / step) * step;
-    const calcRange = calcMax - calcMin;
-
-    const yVals = [];
-    const gridCount = Math.max(5, Math.ceil(calcRange / step));
-    for (let i = 0; i <= gridCount; i++) {
-      yVals.push(calcMin + step * i);
+    const gridLines = [];
+    for (let i = 0; i <= yMax; i += step) {
+      if (i <= yMax) gridLines.push(i);
     }
 
-    return { yValues: yVals, minVal: calcMin, maxVal: calcMax, range: calcRange, actualMin: minValue, actualMax: maxValue };
+    return { yMin: 0, yMax, step, gridLines };
+  }, [maxValue]);
+
+  // Dimensões fixas
+  const SVG_WIDTH = 300;
+  const SVG_HEIGHT = 240;
+  const PADDING_TOP = 10;
+  const PADDING_BOTTOM = 30;
+  const PADDING_LEFT = 10;
+  const PADDING_RIGHT = 10;
+
+  const chartAreaWidth = SVG_WIDTH - PADDING_LEFT - PADDING_RIGHT;
+  const chartAreaHeight = SVG_HEIGHT - PADDING_TOP - PADDING_BOTTOM;
+
+  // Converte dado para coordenadas SVG
+  const getPoint = (index: number, value: number) => {
+    const x = PADDING_LEFT + (index / (chartData.length - 1 || 1)) * chartAreaWidth;
+    const y = PADDING_TOP + chartAreaHeight - ((value - yMin) / (yMax - yMin)) * chartAreaHeight;
+    return { x, y };
   };
 
-  const { yValues, minVal, maxVal, range, actualMin, actualMax } = useMemo(() => calculateOptimalScale(), [maxValue, minValue, allPoints]);
+  // Monta string de pontos para polyline
+  const pointsString = useMemo(() => {
+    return chartData
+      .map((p, idx) => {
+        const { x, y } = getPoint(idx, p.value);
+        return `${x},${y}`;
+      })
+      .join(' ');
+  }, [chartData, yMin, yMax]);
 
-  // Formata números para exibição legível
   const formatNumber = (num: number) => {
     if (num === 0) return '0';
     if (Math.abs(num) >= 1000000) {
@@ -128,8 +99,7 @@ export default function LineChart({ title, points, color }: Props) {
     return Math.round(num).toString();
   };
 
-  // Renderiza o gráfico apenas se houver dados válidos
-  if (allPoints.length === 0) {
+  if (chartData.length === 0) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>{title}</Text>
@@ -140,186 +110,133 @@ export default function LineChart({ title, points, color }: Props) {
     );
   }
 
-  // Dimensões aumentadas para melhor legibilidade
-  const chartHeight = 240;
-  const chartWidth = 300;
-  const padding = 40;
-  const leftPadding = 0;
-  const bottomPadding = 40;
-
-  const normalizeY = (value: number) => {
-    return chartHeight - ((value - minVal) / range) * chartHeight;
-  };
-
-  const normalizeX = (index: number) => {
-    return (index / (allPoints.length - 1 || 1)) * chartWidth;
-  };
-
-  const pathPoints = allPoints
-    .map((point, index) => {
-      const x = normalizeX(index) + leftPadding;
-      const y = normalizeY(point.value) + padding;
-      return `${index === 0 ? 'M' : 'L'} ${x} ${y}`;
-    })
-    .join(' ');
-
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
-      <View style={styles.chartContainer}>
-        <View style={styles.yAxis}>
-          {yValues.map((value, i) => (
-            <Text key={i} style={styles.yLabel}>
-              {formatNumber(value)}
-            </Text>
+      <View style={styles.chartWrapper}>
+        {/* Y-Axis Labels */}
+        <View style={styles.yAxisLabels}>
+          {gridLines.map((val, idx) => (
+            <View key={idx} style={styles.yLabelRow}>
+              <Text style={styles.yLabel}>{formatNumber(val)}</Text>
+            </View>
           ))}
         </View>
 
-        <View style={styles.chartContent}>
-          <View style={styles.gridContainer}>
-            {yValues.map((_, i) => (
-              <View
-                key={i}
-                style={[
-                  styles.gridLine,
-                  {
-                    bottom: (i / (yValues.length - 1 || 1)) * chartHeight,
-                    opacity: i === 0 ? 0.3 : 0.15,
-                  },
-                ]}
-              />
-            ))}
+        {/* SVG Chart Area */}
+        <View style={styles.svgWrapper}>
+          <svg width={SVG_WIDTH} height={SVG_HEIGHT} viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} style={styles.svg}>
+            {/* Grid Lines */}
+            {gridLines.map((val, idx) => {
+              const yPos = PADDING_TOP + chartAreaHeight - ((val - yMin) / (yMax - yMin)) * chartAreaHeight;
+              return (
+                <line
+                  key={`grid-${idx}`}
+                  x1={PADDING_LEFT}
+                  y1={yPos}
+                  x2={SVG_WIDTH - PADDING_RIGHT}
+                  y2={yPos}
+                  stroke="#2B2F63"
+                  strokeWidth="1"
+                  opacity={val === 0 ? 0.4 : 0.15}
+                />
+              );
+            })}
 
-            <svg
-              width={chartWidth + leftPadding}
-              height={chartHeight + padding + bottomPadding}
-              style={styles.svg}
-              viewBox={`0 0 ${chartWidth + leftPadding} ${chartHeight + padding + bottomPadding}`}
-            >
-              <polyline
-                points={allPoints
-                  .map((point, index) => {
-                    const x = normalizeX(index) + leftPadding;
-                    const y = normalizeY(point.value) + padding;
-                    return `${x},${y}`;
-                  })
-                  .join(' ')}
-                fill="none"
-                stroke={color}
-                strokeWidth="4"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              {allPoints.map((point, index) => {
-                const x = normalizeX(index) + leftPadding;
-                const y = normalizeY(point.value) + padding;
-                
-                // Calcula posição do tooltip para não sair da tela
-                const tooltipWidth = 100;
-                const tooltipHeight = 50;
-                let tooltipX = x - tooltipWidth / 2;
-                let tooltipY = y - tooltipHeight - 15;
-                
-                // Ajusta se tooltip sair para esquerda
-                if (tooltipX < 10) tooltipX = 10;
-                // Ajusta se tooltip sair para direita
-                if (tooltipX + tooltipWidth > chartWidth + leftPadding - 10) {
-                  tooltipX = chartWidth + leftPadding - tooltipWidth - 10;
-                }
-                // Ajusta se tooltip sair para cima
-                if (tooltipY < 5) tooltipY = y + 15;
-                
-                return (
-                  <g key={index}>
-                    {/* Hitbox invisível para detectar hover */}
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r="12"
-                      fill="transparent"
-                      style={{
-                        cursor: 'pointer',
-                        pointerEvents: 'auto',
-                      }}
-                      onMouseEnter={() => setHoveredIndex(index)}
-                      onMouseLeave={() => setHoveredIndex(null)}
-                    />
-                    {/* Ponto visível */}
-                    <circle
-                      cx={x}
-                      cy={y}
-                      r="6"
-                      fill={color}
-                      stroke="#0B0B1A"
-                      strokeWidth="2.5"
-                      style={{
-                        filter: hoveredIndex === index ? 'drop-shadow(0 0 8px rgba(229, 226, 255, 0.6))' : 'none',
-                        transition: 'filter 0.2s ease',
-                        pointerEvents: 'none',
-                      }}
-                    />
-                    {hoveredIndex === index && (
-                      <g>
-                        {/* Tooltip background */}
-                        <rect
-                          x={tooltipX}
-                          y={tooltipY}
-                          width={tooltipWidth}
-                          height={tooltipHeight}
-                          fill="#0E1026"
-                          stroke={color}
-                          strokeWidth="2"
-                          rx="6"
-                        />
-                        {/* Tooltip text - label */}
-                        <text
-                          x={tooltipX + tooltipWidth / 2}
-                          y={tooltipY + 18}
-                          textAnchor="middle"
-                          fill="#E5E2FF"
-                          fontSize="11"
-                          fontWeight="600"
-                          fontFamily="monospace"
-                        >
-                          {point.label}
-                        </text>
-                        {/* Tooltip text - value */}
-                        <text
-                          x={tooltipX + tooltipWidth / 2}
-                          y={tooltipY + 35}
-                          textAnchor="middle"
-                          fill={color}
-                          fontSize="13"
-                          fontWeight="700"
-                          fontFamily="monospace"
-                        >
-                          {point.value.toLocaleString('pt-BR', {
-                            minimumFractionDigits: 0,
-                            maximumFractionDigits: 0,
-                          })}
-                        </text>
-                      </g>
-                    )}
-                  </g>
-                );
-              })}
-            </svg>
-          </View>
+            {/* Polyline */}
+            <polyline
+              points={pointsString}
+              fill="none"
+              stroke={color}
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
 
-          <View style={styles.xAxis}>
-            {allPoints.map((point, index) => (
-              <View
-                key={index}
-                style={[
-                  styles.xLabelContainer,
-                  { width: chartWidth / (allPoints.length - 1 || 1) },
-                ]}
-              >
-                <Text style={styles.xLabel}>{point.label}</Text>
-              </View>
-            ))}
-          </View>
+            {/* Data Points com Hover */}
+            {chartData.map((point, idx) => {
+              const { x, y } = getPoint(idx, point.value);
+              
+              return (
+                <g key={`point-${idx}`}>
+                  {/* Invisible hitbox */}
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r="14"
+                    fill="transparent"
+                    style={{ cursor: 'pointer', pointerEvents: 'auto' }}
+                    onMouseEnter={() => setHoveredIndex(idx)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                  />
+                  
+                  {/* Visible point */}
+                  <circle
+                    cx={x}
+                    cy={y}
+                    r="5"
+                    fill={color}
+                    stroke="#0B0B1A"
+                    strokeWidth="2"
+                    style={{
+                      filter: hoveredIndex === idx ? 'drop-shadow(0 0 8px rgba(229, 226, 255, 0.8))' : 'none',
+                      transition: 'filter 0.15s',
+                      pointerEvents: 'none',
+                    }}
+                  />
+
+                  {/* Tooltip */}
+                  {hoveredIndex === idx && (
+                    <g>
+                      <rect
+                        x={Math.max(5, Math.min(x - 50, SVG_WIDTH - 105))}
+                        y={y > 80 ? y - 65 : y + 15}
+                        width="100"
+                        height="55"
+                        fill="#0E1026"
+                        stroke={color}
+                        strokeWidth="2"
+                        rx="6"
+                        style={{ pointerEvents: 'none' }}
+                      />
+                      <text
+                        x={Math.max(5, Math.min(x - 50, SVG_WIDTH - 105)) + 50}
+                        y={y > 80 ? y - 40 : y + 32}
+                        textAnchor="middle"
+                        fill="#E5E2FF"
+                        fontSize="11"
+                        fontWeight="600"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        {point.label}
+                      </text>
+                      <text
+                        x={Math.max(5, Math.min(x - 50, SVG_WIDTH - 105)) + 50}
+                        y={y > 80 ? y - 22 : y + 50}
+                        textAnchor="middle"
+                        fill={color}
+                        fontSize="13"
+                        fontWeight="700"
+                        style={{ pointerEvents: 'none' }}
+                      >
+                        {formatNumber(point.value)}
+                      </text>
+                    </g>
+                  )}
+                </g>
+              );
+            })}
+          </svg>
         </View>
+      </View>
+
+      {/* X-Axis Labels */}
+      <View style={styles.xAxisLabels}>
+        {chartData.map((point, idx) => (
+          <View key={idx} style={styles.xLabelCol}>
+            <Text style={styles.xLabel}>{point.label}</Text>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -337,33 +254,35 @@ const styles = StyleSheet.create({
     color: '#E5E2FF',
     fontSize: 16,
     fontWeight: '800',
-    marginBottom: 20,
+    marginBottom: 16,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
-  chartContainer: {
+  chartWrapper: {
     flexDirection: 'row',
     gap: 8,
+    marginBottom: 8,
   },
-  yAxis: {
+  yAxisLabels: {
     width: 50,
     height: 240,
     justifyContent: 'space-between',
-    paddingVertical: 8,
-    paddingRight: 8,
+    paddingVertical: 0,
+  },
+  yLabelRow: {
+    height: 30,
+    justifyContent: 'center',
     alignItems: 'flex-end',
+    paddingRight: 8,
   },
   yLabel: {
     color: '#A9ACD9',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
     fontFamily: 'monospace',
     textAlign: 'right',
   },
-  chartContent: {
-    flex: 1,
-  },
-  gridContainer: {
+  svgWrapper: {
     position: 'relative',
     width: 300,
     height: 240,
@@ -373,32 +292,24 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2B2F63',
   },
-  gridLine: {
-    position: 'absolute',
-    width: '100%',
-    height: 1,
-    backgroundColor: '#2B2F63',
-    left: 0,
-  },
   svg: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    pointerEvents: 'auto',
-    overflow: 'visible',
+    width: '100%',
+    height: '100%',
   },
-  xAxis: {
+  xAxisLabels: {
     flexDirection: 'row',
-    marginTop: 4,
     width: 300,
-    height: 30,
+    height: 28,
   },
-  xLabelContainer: {
+  xLabelCol: {
+    flex: 1,
     alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingTop: 2,
   },
   xLabel: {
     color: '#A9ACD9',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '500',
     textAlign: 'center',
     fontFamily: 'monospace',
