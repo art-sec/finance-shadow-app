@@ -361,8 +361,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
     .map((item) => ({
       label: item.month,
       value: Number.isFinite(item.faturamento) ? item.faturamento : 0,
-    }))
-    .filter(p => Number.isFinite(p.value));
+    }));
 
   const custoSeries: ChartPoint[] = monthlyData
     .map((item) => {
@@ -373,8 +372,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         label: item.month,
         value: custo,
       };
-    })
-    .filter(p => Number.isFinite(p.value));
+    });
 
   const lucroSeries: ChartPoint[] = monthlyData
     .map((item) => {
@@ -385,8 +383,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         label: item.month,
         value: lucro,
       };
-    })
-    .filter(p => Number.isFinite(p.value));
+    });
 
   const roasSeries: ChartPoint[] = monthlyData
     .map((item) => {
@@ -399,8 +396,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
         label: item.month,
         value: Number.isFinite(roas) ? roas : 0,
       };
-    })
-    .filter(p => Number.isFinite(p.value));
+    });
 
   return (
     <View style={styles.screen}>
