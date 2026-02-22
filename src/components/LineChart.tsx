@@ -230,12 +230,21 @@ export default function LineChart({ title, points, color }: Props) {
                 if (tooltipY < 5) tooltipY = y + 15;
                 
                 return (
-                  <g
-                    key={index}
-                    onMouseEnter={() => setHoveredIndex(index)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                    style={{ cursor: 'pointer' }}
-                  >
+                  <g key={index}>
+                    {/* Hitbox invisível para detectar hover */}
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r="12"
+                      fill="transparent"
+                      style={{
+                        cursor: 'pointer',
+                        pointerEvents: 'auto',
+                      }}
+                      onMouseEnter={() => setHoveredIndex(index)}
+                      onMouseLeave={() => setHoveredIndex(null)}
+                    />
+                    {/* Ponto visível */}
                     <circle
                       cx={x}
                       cy={y}
@@ -246,6 +255,7 @@ export default function LineChart({ title, points, color }: Props) {
                       style={{
                         filter: hoveredIndex === index ? 'drop-shadow(0 0 8px rgba(229, 226, 255, 0.6))' : 'none',
                         transition: 'filter 0.2s ease',
+                        pointerEvents: 'none',
                       }}
                     />
                     {hoveredIndex === index && (
@@ -375,6 +385,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     pointerEvents: 'auto',
+    overflow: 'visible',
   },
   xAxis: {
     flexDirection: 'row',
