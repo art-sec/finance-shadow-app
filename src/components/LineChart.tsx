@@ -14,40 +14,95 @@ type Props = {
 
 export default function LineChart({ title, points, color }: Props) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const maxValue = useMemo(() => Math.max(...points.map((p) => p.value), 1), [points]);
-  const minValue = useMemo(() => Math.min(...points.map((p) => p.value), 0), [points]);
+  
+  // Filtra valores válidos (remove NaN, Infinity, etc)
+  const validPoints = useMemo(() => {
+    return points.filter(p => typeof p.value === 'number' && Number.isFinite(p.value));
+  }, [points]);
 
-  // Calcula escala melhor alinhada
+  const maxValue = useMemo(() => {
+    if (validPoints.length === 0) return 1;
+    return Math.max(...validPoints.map((p) => p.value), 1);
+  }, [validPoints]);
+  
+  const minValue = useMemo(() => {
+    if (validPoints.length === 0) return 0;
+    return Math.min(...validPoints.map((p) => p.value), 0);
+  }, [validPoints]);
+
+  // Calcula escala inteligente com tratamento de outliers
   const calculateOptimalScale = () => {
+    // Função auxiliar para detectar outliers usando IQR (Interquartile Range)
+    const getOutlierBounds = (values: number[]) => {
+      if (values.length < 4) return { lower: Math.min(...values), upper: Math.max(...values) };
+      
+      const sorted = [...values].sort((a, b) => a - b);
+      const q1Index = Math.floor(sorted.length * 0.25);
+      const q3Index = Math.floor(sorted.length * 0.75);
+      
+      const q1 = sorted[q1Index];
+      const q3 = sorted[q3Index];
+      const iqr = q3 - q1 || 1;
+      
+      const lowerBound = q1 - 1.5 * iqr;
+      const upperBound = q3 + 1.5 * iqr;
+      
+      return { lower: lowerBound, upper: upperBound };
+    };
+
+    // Se houver range muito grande (outlier extremo), ignora outlier para melhor visualização
+    const allValues = validPoints.map(p => p.value);
     const range = maxValue - minValue || 1;
+    const { lower: outlierLower, upper: outlierUpper } = getOutlierBounds(allValues);
+    
+    // Define limites de visualização inteligentes
+    let displayMin = minValue;
+    let displayMax = maxValue;
+    
+    // Se há outlier extremo abaixo, tenta usar quartil inferior
+    if (minValue < outlierLower && range > outlierLower * 2) {
+      displayMin = outlierLower;
+    }
+    
+    // Se há outlier extremo acima, tenta usar quartil superior
+    if (maxValue > outlierUpper && range > outlierUpper * 0.5) {
+      displayMax = outlierUpper;
+    }
+    
+    // Sempre adiciona padding (10% acima e abaixo)
+    const displayRange = Math.max(displayMax - displayMin, 1);
+    const padding = displayRange * 0.1;
+    displayMax = displayMax + padding;
+    displayMin = Math.max(0, displayMin - padding); // Nunca vai abaixo de 0 para dados financeiros
+    
+    const finalRange = displayMax - displayMin || 1;
     
     // Define steps redondos para diferentes escalas
     let step = 1;
-    if (range > 1000) {
-      step = Math.pow(10, Math.floor(Math.log10(range)) - 1);
-      // Arredonda para múltiplo de 5
-      step = Math.ceil(range / 5 / step) * step;
-    } else if (range > 100) {
-      step = Math.ceil(range / 5 / 10) * 10;
-    } else if (range > 10) {
-      step = Math.ceil(range / 5);
+    if (finalRange > 1000) {
+      step = Math.pow(10, Math.floor(Math.log10(finalRange)) - 1);
+      step = Math.ceil(finalRange / 5 / step) * step;
+    } else if (finalRange > 100) {
+      step = Math.ceil(finalRange / 5 / 10) * 10;
+    } else if (finalRange > 10) {
+      step = Math.ceil(finalRange / 5);
     }
 
     // Calcula valores com step redondo
-    const calcMax = Math.ceil(maxValue / step) * step;
-    const calcMin = minValue > 0 ? Math.floor(minValue / step) * step : 0;
+    const calcMin = Math.floor(displayMin / step) * step;
+    const calcMax = Math.ceil(displayMax / step) * step;
     const calcRange = calcMax - calcMin;
-    const gridCount = Math.ceil(calcRange / step);
 
     const yVals = [];
+    const gridCount = Math.max(5, Math.ceil(calcRange / step));
     for (let i = 0; i <= gridCount; i++) {
       yVals.push(calcMin + step * i);
     }
 
-    return { yValues: yVals, minVal: calcMin, maxVal: calcMax, range: calcRange };
+    return { yValues: yVals, minVal: calcMin, maxVal: calcMax, range: calcRange, actualMin: minValue, actualMax: maxValue };
   };
 
-  const { yValues, minVal, maxVal, range } = useMemo(() => calculateOptimalScale(), [maxValue, minValue]);
+  const { yValues, minVal, maxVal, range, actualMin, actualMax } = useMemo(() => calculateOptimalScale(), [maxValue, minValue, validPoints]);
 
   // Formata números para exibição legível
   const formatNumber = (num: number) => {
@@ -61,6 +116,18 @@ export default function LineChart({ title, points, color }: Props) {
     return Math.round(num).toString();
   };
 
+  // Renderiza o gráfico apenas se houver dados válidos
+  if (validPoints.length === 0) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>{title}</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>Sem dados para exibir</Text>
+        </View>
+      </View>
+    );
+  }
+
   // Dimensões aumentadas para melhor legibilidade
   const chartHeight = 280;
   const chartWidth = 380;
@@ -72,10 +139,10 @@ export default function LineChart({ title, points, color }: Props) {
   };
 
   const normalizeX = (index: number) => {
-    return (index / (points.length - 1 || 1)) * (chartWidth - padding * 2);
+    return (index / (validPoints.length - 1 || 1)) * (chartWidth - padding * 2);
   };
 
-  const pathPoints = points
+  const pathPoints = validPoints
     .map((point, index) => {
       const x = normalizeX(index) + leftPadding;
       const y = normalizeY(point.value) + padding;
@@ -116,7 +183,7 @@ export default function LineChart({ title, points, color }: Props) {
               style={styles.svg}
             >
               <polyline
-                points={points
+                points={validPoints
                   .map((point, index) => {
                     const x = normalizeX(index) + leftPadding;
                     const y = normalizeY(point.value) + padding;
@@ -129,7 +196,7 @@ export default function LineChart({ title, points, color }: Props) {
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {points.map((point, index) => {
+              {validPoints.map((point, index) => {
                 const x = normalizeX(index) + leftPadding;
                 const y = normalizeY(point.value) + padding;
                 return (
@@ -200,12 +267,12 @@ export default function LineChart({ title, points, color }: Props) {
           </View>
 
           <View style={styles.xAxis}>
-            {points.map((point, index) => (
+            {validPoints.map((point, index) => (
               <View
                 key={index}
                 style={[
                   styles.xLabelContainer,
-                  { width: chartWidth / (points.length - 1 || 1) },
+                  { width: chartWidth / (validPoints.length - 1 || 1) },
                 ]}
               >
                 <Text style={styles.xLabel}>{point.label}</Text>
@@ -290,5 +357,19 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     textAlign: 'center',
     fontFamily: 'monospace',
+  },
+  emptyState: {
+    height: 200,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#0E1026',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#2B2F63',
+  },
+  emptyStateText: {
+    color: '#8C8FB3',
+    fontSize: 14,
+    fontStyle: 'italic',
   },
 });

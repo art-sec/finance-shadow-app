@@ -324,29 +324,50 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
     }
   };
 
-  const faturamentoSeries: ChartPoint[] = monthlyData.map((item) => ({
-    label: item.month,
-    value: item.faturamento,
-  }));
-
-  const custoSeries: ChartPoint[] = monthlyData.map((item) => ({
-    label: item.month,
-    value: item.anuncios + item.funcionarios,
-  }));
-
-  const lucroSeries: ChartPoint[] = monthlyData.map((item) => ({
-    label: item.month,
-    value: item.faturamento - (item.anuncios + item.funcionarios),
-  }));
-
-  const roasSeries: ChartPoint[] = monthlyData.map((item) => {
-    // Evita divisão por zero no cálculo de ROAS
-    const roas = item.anuncios > 0 ? item.faturamento / item.anuncios : 0;
-    return {
+  const faturamentoSeries: ChartPoint[] = monthlyData
+    .map((item) => ({
       label: item.month,
-      value: Number.isFinite(roas) ? roas : 0,
-    };
-  });
+      value: Number.isFinite(item.faturamento) ? item.faturamento : 0,
+    }))
+    .filter(p => Number.isFinite(p.value));
+
+  const custoSeries: ChartPoint[] = monthlyData
+    .map((item) => {
+      const custo = Number.isFinite(item.anuncios) && Number.isFinite(item.funcionarios) 
+        ? item.anuncios + item.funcionarios 
+        : 0;
+      return {
+        label: item.month,
+        value: custo,
+      };
+    })
+    .filter(p => Number.isFinite(p.value));
+
+  const lucroSeries: ChartPoint[] = monthlyData
+    .map((item) => {
+      const lucro = Number.isFinite(item.faturamento) && Number.isFinite(item.anuncios) && Number.isFinite(item.funcionarios)
+        ? item.faturamento - (item.anuncios + item.funcionarios)
+        : 0;
+      return {
+        label: item.month,
+        value: lucro,
+      };
+    })
+    .filter(p => Number.isFinite(p.value));
+
+  const roasSeries: ChartPoint[] = monthlyData
+    .map((item) => {
+      // Evita divisão por zero no cálculo de ROAS
+      let roas = 0;
+      if (Number.isFinite(item.anuncios) && Number.isFinite(item.faturamento) && item.anuncios > 0) {
+        roas = item.faturamento / item.anuncios;
+      }
+      return {
+        label: item.month,
+        value: Number.isFinite(roas) ? roas : 0,
+      };
+    })
+    .filter(p => Number.isFinite(p.value));
 
   return (
     <View style={styles.screen}>
