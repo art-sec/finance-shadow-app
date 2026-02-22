@@ -16,7 +16,50 @@ export default function LineChart({ title, points, color }: Props) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const maxValue = useMemo(() => Math.max(...points.map((p) => p.value), 1), [points]);
   const minValue = useMemo(() => Math.min(...points.map((p) => p.value), 0), [points]);
-  const range = maxValue - minValue || 1;
+
+  // Calcula escala melhor alinhada
+  const calculateOptimalScale = () => {
+    const range = maxValue - minValue || 1;
+    
+    // Define steps redondos para diferentes escalas
+    let step = 1;
+    if (range > 1000) {
+      step = Math.pow(10, Math.floor(Math.log10(range)) - 1);
+      // Arredonda para múltiplo de 5
+      step = Math.ceil(range / 5 / step) * step;
+    } else if (range > 100) {
+      step = Math.ceil(range / 5 / 10) * 10;
+    } else if (range > 10) {
+      step = Math.ceil(range / 5);
+    }
+
+    // Calcula valores com step redondo
+    const calcMax = Math.ceil(maxValue / step) * step;
+    const calcMin = minValue > 0 ? Math.floor(minValue / step) * step : 0;
+    const calcRange = calcMax - calcMin;
+    const gridCount = Math.ceil(calcRange / step);
+
+    const yVals = [];
+    for (let i = 0; i <= gridCount; i++) {
+      yVals.push(calcMin + step * i);
+    }
+
+    return { yValues: yVals, minVal: calcMin, maxVal: calcMax, range: calcRange };
+  };
+
+  const { yValues, minVal, maxVal, range } = useMemo(() => calculateOptimalScale(), [maxValue, minValue]);
+
+  // Formata números para exibição legível
+  const formatNumber = (num: number) => {
+    if (num === 0) return '0';
+    if (Math.abs(num) >= 1000000) {
+      return (num / 1000000).toFixed(1) + 'M';
+    }
+    if (Math.abs(num) >= 1000) {
+      return (num / 1000).toFixed(0) + 'K';
+    }
+    return Math.round(num).toString();
+  };
 
   // Dimensões aumentadas para melhor legibilidade
   const chartHeight = 280;
@@ -25,18 +68,12 @@ export default function LineChart({ title, points, color }: Props) {
   const leftPadding = 70;
 
   const normalizeY = (value: number) => {
-    return chartHeight - ((value - minValue) / range) * chartHeight;
+    return chartHeight - ((value - minVal) / range) * chartHeight;
   };
 
   const normalizeX = (index: number) => {
     return (index / (points.length - 1 || 1)) * (chartWidth - padding * 2);
   };
-
-  const gridLines = 5;
-  const yValues = [];
-  for (let i = 0; i <= gridLines; i++) {
-    yValues.push(minValue + (range / gridLines) * i);
-  }
 
   const pathPoints = points
     .map((point, index) => {
@@ -53,7 +90,7 @@ export default function LineChart({ title, points, color }: Props) {
         <View style={styles.yAxis}>
           {yValues.map((value, i) => (
             <Text key={i} style={styles.yLabel}>
-              {Math.round(value).toString().padStart(3, ' ')}
+              {formatNumber(value)}
             </Text>
           ))}
         </View>
@@ -66,7 +103,7 @@ export default function LineChart({ title, points, color }: Props) {
                 style={[
                   styles.gridLine,
                   {
-                    bottom: (i / gridLines) * chartHeight,
+                    bottom: (i / (yValues.length - 1)) * chartHeight,
                     opacity: i === 0 ? 0.3 : 0.15,
                   },
                 ]}
@@ -150,7 +187,7 @@ export default function LineChart({ title, points, color }: Props) {
                           fontFamily="monospace"
                         >
                           {point.value.toLocaleString('pt-BR', {
-                            minimumFractionDigits: 2,
+                            minimumFractionDigits: 0,
                             maximumFractionDigits: 2,
                           })}
                         </text>
