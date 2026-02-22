@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 
 export type LineChartPoint = {
@@ -13,6 +13,7 @@ type Props = {
 };
 
 export default function LineChart({ title, points, color }: Props) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   const maxValue = useMemo(() => Math.max(...points.map((p) => p.value), 1), [points]);
   const minValue = useMemo(() => Math.min(...points.map((p) => p.value), 0), [points]);
   const range = maxValue - minValue || 1;
@@ -95,15 +96,67 @@ export default function LineChart({ title, points, color }: Props) {
                 const x = normalizeX(index) + leftPadding;
                 const y = normalizeY(point.value) + padding;
                 return (
-                  <circle
+                  <g
                     key={index}
-                    cx={x}
-                    cy={y}
-                    r="6"
-                    fill={color}
-                    stroke="#0B0B1A"
-                    strokeWidth="2.5"
-                  />
+                    onMouseEnter={() => setHoveredIndex(index)}
+                    onMouseLeave={() => setHoveredIndex(null)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <circle
+                      cx={x}
+                      cy={y}
+                      r="6"
+                      fill={color}
+                      stroke="#0B0B1A"
+                      strokeWidth="2.5"
+                      style={{
+                        filter: hoveredIndex === index ? 'drop-shadow(0 0 8px rgba(229, 226, 255, 0.6))' : 'none',
+                        transition: 'filter 0.2s ease',
+                      }}
+                    />
+                    {hoveredIndex === index && (
+                      <g>
+                        {/* Tooltip background */}
+                        <rect
+                          x={x - 60}
+                          y={y - 60}
+                          width="120"
+                          height="50"
+                          fill="#0E1026"
+                          stroke={color}
+                          strokeWidth="2"
+                          rx="6"
+                        />
+                        {/* Tooltip text - label */}
+                        <text
+                          x={x}
+                          y={y - 40}
+                          textAnchor="middle"
+                          fill="#E5E2FF"
+                          fontSize="12"
+                          fontWeight="600"
+                          fontFamily="monospace"
+                        >
+                          {point.label}
+                        </text>
+                        {/* Tooltip text - value */}
+                        <text
+                          x={x}
+                          y={y - 22}
+                          textAnchor="middle"
+                          fill={color}
+                          fontSize="14"
+                          fontWeight="700"
+                          fontFamily="monospace"
+                        >
+                          {point.value.toLocaleString('pt-BR', {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
+                        </text>
+                      </g>
+                    )}
+                  </g>
                 );
               })}
             </svg>
@@ -184,6 +237,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 0,
     left: 0,
+    pointerEvents: 'auto',
   },
   xAxis: {
     flexDirection: 'row',
