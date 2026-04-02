@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /admin
+Disallow: /auth
+Crawl-delay: 1
+
+Sitemap: https://shadow-finances.app/sitemap.xml

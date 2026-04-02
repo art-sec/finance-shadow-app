@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+ import React, { useMemo, useState } from 'react';
+import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
 
 export type LineChartPoint = {
   label: string;
@@ -13,6 +13,7 @@ type Props = {
 };
 
 export default function LineChart({ title, points, color }: Props) {
+  const { width } = useWindowDimensions();
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
   
   // Garante que temos exatamente os dados passados, sem filtros
@@ -60,9 +61,20 @@ export default function LineChart({ title, points, color }: Props) {
     return { yMin: 0, yMax, step, gridLines };
   }, [maxValue]);
 
-  // Dimensões fixas
-  const SVG_WIDTH = 300;
-  const SVG_HEIGHT = 240;
+  const SVG_WIDTH = useMemo(() => {
+    if (width < 430) {
+      return Math.max(220, width - 130);
+    }
+    if (width < 780) {
+      return 280;
+    }
+    if (width < 1200) {
+      return 320;
+    }
+    return 360;
+  }, [width]);
+
+  const SVG_HEIGHT = width < 430 ? 210 : 240;
   const PADDING_TOP = 10;
   const PADDING_BOTTOM = 30;
   const PADDING_LEFT = 10;
@@ -115,7 +127,7 @@ export default function LineChart({ title, points, color }: Props) {
       <Text style={styles.title}>{title}</Text>
       <View style={styles.chartWrapper}>
         {/* Y-Axis Labels */}
-        <View style={styles.yAxisLabels}>
+        <View style={[styles.yAxisLabels, { width: width < 430 ? 42 : 50, height: SVG_HEIGHT }] }>
           {gridLines.map((val, idx) => (
             <View key={idx} style={styles.yLabelRow}>
               <Text style={styles.yLabel}>{formatNumber(val)}</Text>
@@ -124,7 +136,7 @@ export default function LineChart({ title, points, color }: Props) {
         </View>
 
         {/* SVG Chart Area */}
-        <View style={styles.svgWrapper}>
+        <View style={[styles.svgWrapper, { width: SVG_WIDTH, height: SVG_HEIGHT }]}>
           <svg width={SVG_WIDTH} height={SVG_HEIGHT} viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} style={styles.svg}>
             {/* Grid Lines */}
             {gridLines.map((val, idx) => {
@@ -148,7 +160,7 @@ export default function LineChart({ title, points, color }: Props) {
               points={pointsString}
               fill="none"
               stroke={color}
-              strokeWidth="3"
+              strokeWidth="3.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
@@ -174,12 +186,12 @@ export default function LineChart({ title, points, color }: Props) {
                   <circle
                     cx={x}
                     cy={y}
-                    r="5"
+                    r="6"
                     fill={color}
                     stroke="#0B0B1A"
-                    strokeWidth="2"
+                    strokeWidth="2.5"
                     style={{
-                      filter: hoveredIndex === idx ? 'drop-shadow(0 0 8px rgba(229, 226, 255, 0.8))' : 'none',
+                      filter: hoveredIndex === idx ? 'drop-shadow(0 0 10px rgba(229, 226, 255, 0.9))' : 'none',
                       transition: 'filter 0.15s',
                       pointerEvents: 'none',
                     }}
@@ -231,7 +243,7 @@ export default function LineChart({ title, points, color }: Props) {
       </View>
 
       {/* X-Axis Labels */}
-      <View style={styles.xAxisLabels}>
+      <View style={[styles.xAxisLabels, { width: SVG_WIDTH }]}>
         {chartData.map((point, idx) => (
           <View key={idx} style={styles.xLabelCol}>
             <Text style={styles.xLabel}>{point.label}</Text>
@@ -252,9 +264,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: '#E5E2FF',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: '800',
-    marginBottom: 16,
+    marginBottom: 18,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
   },
@@ -264,8 +276,6 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   yAxisLabels: {
-    width: 50,
-    height: 240,
     justifyContent: 'space-between',
     paddingVertical: 0,
   },
@@ -276,16 +286,14 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   yLabel: {
-    color: '#A9ACD9',
-    fontSize: 10,
-    fontWeight: '500',
+    color: '#B4B8E6',
+    fontSize: 11,
+    fontWeight: '600',
     fontFamily: 'monospace',
     textAlign: 'right',
   },
   svgWrapper: {
     position: 'relative',
-    width: 300,
-    height: 240,
     backgroundColor: '#0E1026',
     borderRadius: 12,
     overflow: 'hidden',
@@ -298,7 +306,6 @@ const styles = StyleSheet.create({
   },
   xAxisLabels: {
     flexDirection: 'row',
-    width: 300,
     height: 28,
   },
   xLabelCol: {
@@ -308,9 +315,9 @@ const styles = StyleSheet.create({
     paddingTop: 2,
   },
   xLabel: {
-    color: '#A9ACD9',
-    fontSize: 11,
-    fontWeight: '500',
+    color: '#B4B8E6',
+    fontSize: 13,
+    fontWeight: '600',
     textAlign: 'center',
     fontFamily: 'monospace',
   },

@@ -1,15 +1,19 @@
 /**
- * Dashboard Screen - Painel Financeiro Principal
+ * Dashboard Screen - Painel Financeiro Principal com Abas
  * 
  * Este componente mostra:
- * - Resumo de dados financeiros mensais
+ * - Sistema de abas (Dashboard e Faturamento)
+ * - Aba Dashboard: Resumo de dados financeiros mensais
+ * - Aba Faturamento: Gastos diários com percentuais
  * - Gráficos de tendências
  * - Formulário para editar dados
  * - Sincronização com Firestore
  * 
  * Funcionalidades:
+ * - Abas para alternar entre resumo mensal e gastos diários
  * - Carrega dados do Firestore (coleção 'finance')
  * - Permite editar faturamento, anúncios, funcionários
+ * - Calcula percentuais de gastos e lucro
  * - Calcula total automaticamente
  * - Sincroniza alterações com banco de dados
  * - Responsivo para diferentes tamanhos de tela
@@ -19,19 +23,25 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  useWindowDimensions,
   View,
 } from 'react-native';
 import { signOut } from 'firebase/auth';
 import { collection, doc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import LineChart from '../components/LineChart';
+import {
+  LineChart,
+  SimpleButton,
+  SimpleCard,
+  SimpleInput,
+  SimpleMetrics,
+  SimpleTabs,
+  SimpleSection,
+} from '../components';
+import BillingScreen from './BillingScreen';
 
 /**
  * Tipo para dados de um mês específico
@@ -98,81 +108,14 @@ type Props = {
 
 export default function DashboardScreen({ userEmail, userId }: Props) {
   // ===== ESTADOS =====
-  
-  // Mês selecionado para edição
+  const [selectedTab, setSelectedTab] = useState<'dashboard' | 'billing'>('dashboard');
   const [selectedMonth, setSelectedMonth] = useState('Jan');
-  
-  // Dados mensais (inicializa vazio para o usuário preencher)
   const [monthlyData, setMonthlyData] = useState<MonthlyData[]>(DATA_EMPTY);
-  
-  // Indica se está carregando dados do Firestore
   const [loadingData, setLoadingData] = useState(false);
-  
-  // Indica se está salvando dados no Firestore
   const [saving, setSaving] = useState(false);
-  
-  // Mensagem de sucesso ao salvar
   const [saveMessage, setSaveMessage] = useState('');
-  
-  // Erros de validação do formulário
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof MonthlyData, string>>>({});
-  
-  // Trigger para recarregar dados após salvar
   const [reloadTrigger, setReloadTrigger] = useState(0);
-  
-  // ===== DIMENSÕES E LAYOUT =====
-  
-  // Largura da tela atual
-  const { width } = useWindowDimensions();
-  
-  // Tela estreita: < 700px (mobile)
-  const isNarrow = width < 700;
-  
-  // Largura máxima do conteúdo
-  const maxContentWidth = 1100;
-  
-  // Número de colunas para cards (1, 2 ou 3)
-  const columns = width >= 1100 ? 3 : width >= 720 ? 2 : 1;
-  
-  // Largura disponível para conteúdo
-  const availableWidth = Math.min(width, maxContentWidth) - 40;
-  
-  // Largura de cada card
-  const cardWidth = columns === 1
-    ? '100%'
-    : (availableWidth - (columns - 1) * 12) / columns;
-
-  // Número de colunas para gráficos
-  const chartColumns = width >= 900 ? 2 : 1;
-  
-  // Largura de cada gráfico
-  const chartWidth = chartColumns === 1
-    ? '100%'
-    : (availableWidth - (chartColumns - 1) * 16) / chartColumns;
-
-  // ===== ANIMAÇÕES =====
-  
-  // Animação de opacidade para fade-in
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  
-  // Animação de movimento para slide-in
-  const slideAnim = useRef(new Animated.Value(16)).current;
-
-  // Hook: Executar animações ao montar
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, slideAnim]);
 
   // Hook: Carregar dados do Firestore quando userId muda
   useEffect(() => {
@@ -250,14 +193,23 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
   const custoTotal = currentData.anuncios + currentData.funcionarios;
   const lucroLiquido = currentData.faturamento - custoTotal;
   const roas = currentData.anuncios > 0 ? currentData.retornoAnuncios / currentData.anuncios : 0;
+  
+  // Cálculos de percentuais
+  const percentualFuncionarios = currentData.faturamento > 0 
+    ? (currentData.funcionarios / currentData.faturamento) * 100 
+    : 0;
+  const percentualLucro = currentData.faturamento > 0 
+    ? (lucroLiquido / currentData.faturamento) * 100 
+    : 0;
 
+  // Apenas 5-6 métricas principais para simplificar
   const metrics = [
-    { label: 'Faturamento', value: formatCurrency(currentData.faturamento) },
-    { label: 'Gasto com anuncios', value: formatCurrency(currentData.anuncios) },
-    { label: 'Retorno dos ads (ROAS)', value: formatRatio(roas) },
-    { label: 'Gasto com funcionarios', value: formatCurrency(currentData.funcionarios) },
-    { label: 'Lucro liquido', value: formatCurrency(lucroLiquido) },
-    { label: 'Custo total', value: formatCurrency(custoTotal) },
+    { label: 'Faturamento', value: formatCurrency(currentData.faturamento), color: '#7C5CFF', icon: '💰' },
+    { label: '% Funcionários', value: `${percentualFuncionarios.toFixed(1)}%`, color: '#4EC5FF', icon: '👥' },
+    { label: 'Lucro Líquido', value: formatCurrency(lucroLiquido), color: '#6DDFB5', icon: '📊' },
+    { label: '% Lucro', value: `${percentualLucro.toFixed(1)}%`, color: '#F59E76', icon: '📈' },
+    { label: 'Custo Total', value: formatCurrency(custoTotal), color: '#FF7F50', icon: '💸' },
+    { label: 'ROAS', value: formatRatio(roas), color: '#F0A500', icon: '🎯' },
   ];
 
   const validateMonth = (data: MonthlyData) => {
@@ -404,170 +356,154 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.bgGlow} />
-      <View style={styles.bgGlowAlt} />
-      <ScrollView contentContainerStyle={styles.content}>
-        <Animated.View style={{ opacity: fadeAnim, transform: [{ translateY: slideAnim }] }}>
-          <View style={[styles.header, isNarrow ? styles.headerStack : null]}>
-            <View>
-              <Text style={styles.kicker}>Painel Financeiro</Text>
-              <Text style={styles.title}>Resumo mensal</Text>
-              {userEmail ? <Text style={styles.email}>{userEmail}</Text> : null}
-            </View>
-            <View style={styles.headerActions}>
-              <Pressable
-                style={[styles.signOut, isNarrow ? styles.signOutFull : null]}
-                onPress={() => signOut(auth)}
-              >
-                <Text style={styles.signOutText}>Sair</Text>
-              </Pressable>
-            </View>
-          </View>
+      {/* Tabs de Navegação */}
+      <SimpleTabs
+        tabs={[
+          { id: 'dashboard', label: 'Dashboard', icon: '📊' },
+          { id: 'billing', label: 'Faturamento', icon: '💳' },
+        ]}
+        activeTab={selectedTab}
+        onTabChange={(tab) => setSelectedTab(tab as 'dashboard' | 'billing')}
+      />
 
-          <View style={styles.selector}>
-            <Text style={styles.selectorLabel}>Mes:</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      {selectedTab === 'dashboard' ? (
+        <ScrollView
+          contentContainerStyle={styles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          {/* Cabeçalho */}
+          <SimpleSection title="Painel Financeiro" icon="📱">
+            <View style={styles.header}>
+              <View style={styles.headerInfo}>
+                <Text style={styles.subtitle}>Resumo mensal</Text>
+                {userEmail && <Text style={styles.email}>{userEmail}</Text>}
+              </View>
+              <SimpleButton
+                label="Sair"
+                onPress={() => signOut(auth)}
+                variant="secondary"
+                size="medium"
+              />
+            </View>
+          </SimpleSection>
+
+          {/* Seletor de Mês */}
+          <SimpleSection title="Selecione o Mês" icon="📅">
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.monthScroll}>
               {monthlyData.map((item) => (
                 <Pressable
                   key={item.month}
-                  style={({ pressed }) => [
-                    styles.monthChip,
-                    selectedMonth === item.month ? styles.monthChipActive : null,
-                    pressed ? styles.monthChipPressed : null,
+                  style={[
+                    styles.monthButton,
+                    selectedMonth === item.month && styles.monthButtonActive,
                   ]}
                   onPress={() => setSelectedMonth(item.month)}
                 >
                   <Text
-                    style={
-                      selectedMonth === item.month
-                        ? styles.monthTextActive
-                        : styles.monthText
-                    }
+                    style={[
+                      styles.monthButtonText,
+                      selectedMonth === item.month && styles.monthButtonTextActive,
+                    ]}
                   >
                     {item.month}
                   </Text>
                 </Pressable>
               ))}
             </ScrollView>
-          </View>
+          </SimpleSection>
 
-          {loadingData ? (
-            <View style={styles.loadingRow}>
-              <ActivityIndicator color="#7C5CFF" />
-              <Text style={styles.loadingText}>Carregando dados do Firestore...</Text>
-            </View>
-          ) : null}
+          {/* Carregando */}
+          {loadingData && (
+            <SimpleSection title="">
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#4CAF50" />
+                <Text style={styles.loadingText}>Carregando dados...</Text>
+              </View>
+            </SimpleSection>
+          )}
 
-          <View style={styles.cards}>
-            {metrics.map((metric) => (
-              <View key={metric.label} style={[styles.card, { width: cardWidth }]}>
-                <Text style={styles.cardLabel}>{metric.label}</Text>
-                <Text style={styles.cardValue}>{metric.value}</Text>
-              </View>
-            ))}
-          </View>
+          {/* Métricas */}
+          <SimpleSection title="Métricas do Mês" icon="📈">
+            <SimpleMetrics metrics={metrics} columns={2} />
+          </SimpleSection>
 
-          <View style={styles.charts}>
-            <Text style={styles.sectionTitle}>Tendencias anuais</Text>
-            <View style={styles.chartGrid}>
-              <View style={[styles.lineChartWrapper, { width: chartWidth }]}>
-                <LineChart title="Faturamento" points={faturamentoSeries} color="#7C5CFF" />
+          {/* Gráficos */}
+          <SimpleSection title="Tendências Anuais" icon="📉">
+            <View style={styles.chartsGrid}>
+              <View style={styles.chart}>
+                <LineChart title="Faturamento" points={faturamentoSeries} color="#4CAF50" />
               </View>
-              <View style={[styles.lineChartWrapper, { width: chartWidth }]}>
-                <LineChart title="Custo total" points={custoSeries} color="#4EC5FF" />
+              <View style={styles.chart}>
+                <LineChart title="Custo Total" points={custoSeries} color="#F44336" />
               </View>
-              <View style={[styles.lineChartWrapper, { width: chartWidth }]}>
-                <LineChart title="Lucro liquido" points={lucroSeries} color="#6DDFB5" />
+              <View style={styles.chart}>
+                <LineChart title="Lucro Líquido" points={lucroSeries} color="#FF9800" />
               </View>
-              <View style={[styles.lineChartWrapper, { width: chartWidth }]}>
-                <LineChart title="ROAS" points={roasSeries} color="#F59E76" />
-              </View>
-            </View>
-          </View>
-
-          <View style={styles.form}>
-            <Text style={styles.formTitle}>Atualizar dados do mes</Text>
-            <View style={styles.formRow}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Faturamento</Text>
-                <TextInput
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor="#8C8FB3"
-                  style={styles.input}
-                  value={String(currentData.faturamento)}
-                  onChangeText={(value) => updateField('faturamento', value)}
-                />
-                {formErrors.faturamento ? (
-                  <Text style={styles.errorText}>{formErrors.faturamento}</Text>
-                ) : null}
-              </View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Gasto com anuncios</Text>
-                <TextInput
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor="#8C8FB3"
-                  style={styles.input}
-                  value={String(currentData.anuncios)}
-                  onChangeText={(value) => updateField('anuncios', value)}
-                />
-                {formErrors.anuncios ? (
-                  <Text style={styles.errorText}>{formErrors.anuncios}</Text>
-                ) : null}
-              </View>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Retorno dos anuncios</Text>
-                <TextInput
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor="#8C8FB3"
-                  style={styles.input}
-                  value={String(currentData.retornoAnuncios)}
-                  onChangeText={(value) => updateField('retornoAnuncios', value)}
-                />
-                {formErrors.retornoAnuncios ? (
-                  <Text style={styles.errorText}>{formErrors.retornoAnuncios}</Text>
-                ) : null}
+              <View style={styles.chart}>
+                <LineChart title="ROAS" points={roasSeries} color="#2196F3" />
               </View>
             </View>
-            <View style={styles.formRow}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>Gasto com funcionarios</Text>
-                <TextInput
-                  keyboardType="numeric"
-                  placeholder="0"
-                  placeholderTextColor="#8C8FB3"
-                  style={styles.input}
-                  value={String(currentData.funcionarios)}
-                  onChangeText={(value) => updateField('funcionarios', value)}
-                />
-                {formErrors.funcionarios ? (
-                  <Text style={styles.errorText}>{formErrors.funcionarios}</Text>
-                ) : null}
-              </View>
+          </SimpleSection>
 
+          {/* Formulário */}
+          <SimpleSection title="Atualizar Dados" icon="✏️">
+            <View style={styles.formGrid}>
+              <SimpleInput
+                label="Faturamento"
+                placeholder="Ex: 50000"
+                keyboardType="numeric"
+                value={String(currentData.faturamento)}
+                onChangeText={(value) => updateField('faturamento', value)}
+                error={!!formErrors.faturamento}
+                help={formErrors.faturamento}
+              />
+              <SimpleInput
+                label="Gasto com Anúncios"
+                placeholder="Ex: 10000"
+                keyboardType="numeric"
+                value={String(currentData.anuncios)}
+                onChangeText={(value) => updateField('anuncios', value)}
+                error={!!formErrors.anuncios}
+                help={formErrors.anuncios}
+              />
+              <SimpleInput
+                label="Retorno dos Anúncios"
+                placeholder="Ex: 30000"
+                keyboardType="numeric"
+                value={String(currentData.retornoAnuncios)}
+                onChangeText={(value) => updateField('retornoAnuncios', value)}
+                error={!!formErrors.retornoAnuncios}
+                help={formErrors.retornoAnuncios}
+              />
+              <SimpleInput
+                label="Gasto com Funcionários"
+                placeholder="Ex: 20000"
+                keyboardType="numeric"
+                value={String(currentData.funcionarios)}
+                onChangeText={(value) => updateField('funcionarios', value)}
+                error={!!formErrors.funcionarios}
+                help={formErrors.funcionarios}
+              />
             </View>
 
-            {saveMessage ? <Text style={styles.saveMessage}>{saveMessage}</Text> : null}
+            {saveMessage && (
+              <Text style={[styles.message, saveMessage.includes('sucesso') && styles.successMessage]}>
+                {saveMessage}
+              </Text>
+            )}
 
-            <Pressable
-              style={({ pressed }) => [
-                styles.saveButton,
-                pressed ? styles.saveButtonPressed : null,
-              ]}
+            <SimpleButton
+              label="💾 Salvar Mês"
               onPress={handleSave}
               disabled={saving}
-            >
-              {saving ? (
-                <ActivityIndicator color="#F4F2FF" />
-              ) : (
-                <Text style={styles.saveButtonText}>Salvar mes</Text>
-              )}
-            </Pressable>
-          </View>
-        </Animated.View>
-      </ScrollView>
+              loading={saving}
+              size="large"
+            />
+          </SimpleSection>
+        </ScrollView>
+      ) : (
+        <BillingScreen selectedMonth={selectedMonth} userId={userId} />
+      )}
     </View>
   );
 }
@@ -577,236 +513,89 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0B0B1A',
   },
-  bgGlow: {
-    position: 'absolute',
-    width: 380,
-    height: 380,
-    borderRadius: 190,
-    backgroundColor: '#2C2F7A',
-    top: -140,
-    right: -120,
-    opacity: 0.45,
-  },
-  bgGlowAlt: {
-    position: 'absolute',
-    width: 420,
-    height: 420,
-    borderRadius: 210,
-    backgroundColor: '#4C1D95',
-    bottom: -200,
-    left: -140,
-    opacity: 0.35,
-  },
   content: {
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    gap: 16,
     paddingBottom: 40,
     alignSelf: 'center',
     width: '100%',
-    maxWidth: 1100,
+    maxWidth: 1180,
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    marginBottom: 20,
-  },
-  headerStack: {
-    flexDirection: 'column',
-    gap: 12,
-  },
-  headerActions: {
-    flexDirection: 'row',
-    gap: 8,
     alignItems: 'center',
   },
-  kicker: {
-    color: '#A9ACD9',
-    textTransform: 'uppercase',
-    fontSize: 13,
-    letterSpacing: 2,
-    fontWeight: '600',
+  headerInfo: {
+    flex: 1,
   },
-  title: {
-    fontSize: 32,
-    color: '#F4F2FF',
-    fontFamily: 'Avenir Next',
-    fontWeight: '800',
-    marginTop: 4,
-    letterSpacing: 0.5,
+  subtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#A9ACD9',
+    marginBottom: 4,
   },
   email: {
-    color: '#C7C9E6',
-    marginTop: 8,
     fontSize: 14,
-    fontWeight: '500',
+    color: '#8C8FB3',
   },
-  signOut: {
-    backgroundColor: '#7C5CFF',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
+  monthScroll: {
+    marginVertical: 8,
   },
-  signOutFull: {
-    alignSelf: 'flex-start',
-  },
-  signOutText: {
-    color: '#F2EEFF',
-    fontWeight: '700',
-  },
-  selector: {
-    backgroundColor: '#121427',
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#232651',
-  },
-  selectorLabel: {
-    color: '#B4B8E6',
-    marginBottom: 10,
-  },
-  monthChip: {
-    borderRadius: 20,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    backgroundColor: '#0E1026',
-    borderWidth: 1,
-    borderColor: '#242857',
+  monthButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: '#0E1026',
+    borderWidth: 2,
+    borderColor: '#2B2F63',
   },
-  monthChipActive: {
+  monthButtonActive: {
     backgroundColor: '#7C5CFF',
     borderColor: '#7C5CFF',
   },
-  monthChipPressed: {
-    opacity: 0.85,
-  },
-  monthText: {
-    color: '#C2C6F3',
+  monthButtonText: {
+    fontSize: 14,
     fontWeight: '600',
+    color: '#C2C6F3',
   },
-  monthTextActive: {
+  monthButtonTextActive: {
     color: '#F3F1FF',
     fontWeight: '700',
   },
-  loadingRow: {
-    flexDirection: 'row',
+  loadingContainer: {
     alignItems: 'center',
-    gap: 10,
-    marginBottom: 16,
+    paddingVertical: 20,
+    gap: 12,
   },
   loadingText: {
-    color: '#B4B8E6',
-  },
-  cards: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-  },
-  card: {
-    backgroundColor: '#141732',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#2B2F63',
-  },
-  cardLabel: {
-    color: '#9EA4DB',
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  cardValue: {
-    color: '#F4F2FF',
-    fontSize: 22,
-    fontFamily: 'Avenir Next',
-    fontWeight: '800',
-  },
-  charts: {
-    marginTop: 28,
-  },
-  sectionTitle: {
-    color: '#E5E2FF',
-    fontSize: 17,
-    fontWeight: '700',
-    marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-  },
-  chartGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 20,
-  },
-  lineChartWrapper: {
-    flex: 1,
-    minWidth: 420,
-  },
-  form: {
-    marginTop: 24,
-    backgroundColor: '#121427',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#232651',
-  },
-  formTitle: {
-    color: '#E5E2FF',
-    fontSize: 17,
-    fontWeight: '800',
-    marginBottom: 16,
-    textTransform: 'uppercase',
-    letterSpacing: 1.5,
-  },
-  formRow: {
-    flexDirection: 'row',
-    gap: 12,
-    flexWrap: 'wrap',
-  },
-  inputGroup: {
-    flex: 1,
-    minWidth: 220,
-    marginBottom: 12,
-  },
-  inputLabel: {
-    color: '#A7ABDE',
-    marginBottom: 8,
-    fontSize: 12,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-  },
-  input: {
-    backgroundColor: '#0E1026',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2B2F63',
-    padding: 12,
-    color: '#F5F2FF',
-  },
-  errorText: {
-    color: '#FF9BC2',
-    fontSize: 12,
-    marginTop: 6,
-  },
-  saveMessage: {
-    color: '#B4B8E6',
-    marginBottom: 10,
-  },
-  saveButton: {
-    backgroundColor: '#7C5CFF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 4,
-  },
-  saveButtonPressed: {
-    opacity: 0.9,
-  },
-  saveButtonText: {
-    color: '#F4F2FF',
-    fontWeight: '700',
     fontSize: 16,
+    color: '#B4B8E6',
+    fontWeight: '500',
+  },
+  chartsGrid: {
+    gap: 16,
+  },
+  chart: {
+    borderRadius: 14,
+    overflow: 'hidden',
+    backgroundColor: '#141732',
+    borderWidth: 1,
+    borderColor: '#2B2F63',
+  },
+  formGrid: {
+    gap: 16,
+    marginBottom: 16,
+  },
+  message: {
+    fontSize: 14,
+    marginBottom: 12,
+    textAlign: 'center',
+    fontWeight: '600',
+  },
+  successMessage: {
+    color: '#6DDFB5',
   },
 });

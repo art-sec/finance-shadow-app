@@ -1,15 +1,17 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import {
-  Animated,
   ActivityIndicator,
+  KeyboardAvoidingView,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
+import { SimpleButton, SimpleInput } from '../components';
 
 type Props = {
   onRegister: () => void;
@@ -20,23 +22,6 @@ export default function LoginScreen({ onRegister }: Props) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(16)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-      Animated.timing(slideAnim, {
-        toValue: 0,
-        duration: 500,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [fadeAnim, slideAnim]);
 
   const handleLogin = async () => {
     setError('');
@@ -52,57 +37,63 @@ export default function LoginScreen({ onRegister }: Props) {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.bgBlobTop} />
-      <View style={styles.bgBlobBottom} />
-
-      <Animated.View
-        style={[
-          styles.card,
-          { opacity: fadeAnim, transform: [{ translateY: slideAnim }] },
-        ]}
+      <KeyboardAvoidingView
+        style={styles.keyboardWrap}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        <Text style={styles.title}>Shadow Finance</Text>
-        <Text style={styles.subtitle}>Acesse o painel de finanças</Text>
-
-        <TextInput
-          autoCapitalize="none"
-          keyboardType="email-address"
-          placeholder="Email"
-          placeholderTextColor="#8A9099"
-          style={styles.input}
-          value={email}
-          onChangeText={setEmail}
-        />
-        <TextInput
-          placeholder="Senha"
-          placeholderTextColor="#8A9099"
-          secureTextEntry
-          style={styles.input}
-          value={password}
-          onChangeText={setPassword}
-        />
-
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-
-        <Pressable
-          style={({ pressed }) => [
-            styles.button,
-            pressed ? styles.buttonPressed : null,
-          ]}
-          onPress={handleLogin}
-          disabled={loading}
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color="#F4F2FF" />
-          ) : (
-            <Text style={styles.buttonText}>Entrar</Text>
-          )}
-        </Pressable>
+          <View style={styles.card}>
+            {/* Logo/Título */}
+            <Text style={styles.title}>💰 Shadow Finance</Text>
+            <Text style={styles.subtitle}>Painel de Finanças</Text>
 
-        <Pressable style={styles.link} onPress={onRegister}>
-          <Text style={styles.linkText}>Criar conta</Text>
-        </Pressable>
-      </Animated.View>
+            {/* Formulário */}
+            <View style={styles.form}>
+              <SimpleInput
+                label="Email"
+                placeholder="seu@email.com"
+                keyboardType="email-address"
+                value={email}
+                onChangeText={setEmail}
+                editable={!loading}
+              />
+
+              <SimpleInput
+                label="Senha"
+                placeholder="••••••••"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                editable={!loading}
+              />
+
+              {error && <Text style={styles.error}>{error}</Text>}
+
+              <SimpleButton
+                label={loading ? "Entrando..." : "🔓 Entrar"}
+                onPress={handleLogin}
+                disabled={loading}
+                loading={loading}
+                size="large"
+              />
+
+              <Pressable
+                style={({ pressed }) => [ styles.registerLink, pressed && styles.registerLinkPressed ]}
+                onPress={onRegister}
+                disabled={loading}
+              >
+                <Text style={styles.registerLinkText}>
+                  Não tem conta? <Text style={styles.registerLinkBold}>Criar agora</Text>
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        </ScrollView>
+      </KeyboardAvoidingView>
     </View>
   );
 }
@@ -111,84 +102,67 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     backgroundColor: '#0B0B1A',
-    alignItems: 'center',
+  },
+  keyboardWrap: {
+    flex: 1,
+  },
+  scrollContent: {
+    flexGrow: 1,
     justifyContent: 'center',
-    padding: 24,
-  },
-  bgBlobTop: {
-    position: 'absolute',
-    width: 240,
-    height: 240,
-    borderRadius: 120,
-    backgroundColor: '#2C2F7A',
-    top: -60,
-    left: -40,
-    opacity: 0.6,
-  },
-  bgBlobBottom: {
-    position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: '#4C1D95',
-    bottom: -120,
-    right: -60,
-    opacity: 0.5,
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 20,
   },
   card: {
     width: '100%',
-    maxWidth: 420,
+    maxWidth: 400,
     backgroundColor: '#141732',
-    borderRadius: 20,
+    borderRadius: 16,
     padding: 24,
     borderWidth: 1,
     borderColor: '#2B2F63',
   },
   title: {
-    fontSize: 28,
+    fontSize: 32,
     color: '#F4F2FF',
-    fontFamily: 'Avenir Next',
-    fontWeight: '700',
-    marginBottom: 6,
+    fontWeight: '800',
+    marginBottom: 4,
   },
   subtitle: {
-    color: '#C7C9E6',
-    marginBottom: 20,
+    color: '#A9ACD9',
+    marginBottom: 24,
     fontSize: 14,
+    fontWeight: '500',
   },
-  input: {
-    backgroundColor: '#0E1026',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2B2F63',
-    padding: 14,
-    color: '#F4F2FF',
-    marginBottom: 12,
-  },
-  button: {
-    backgroundColor: '#7C5CFF',
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  buttonPressed: {
-    opacity: 0.9,
-  },
-  buttonText: {
-    color: '#F4F2FF',
-    fontWeight: '700',
-    fontSize: 16,
-  },
-  link: {
-    marginTop: 16,
-    alignItems: 'center',
-  },
-  linkText: {
-    color: '#C7C9E6',
+  form: {
+    gap: 16,
   },
   error: {
+    backgroundColor: '#3D1A2D',
     color: '#FF9BC2',
-    marginBottom: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 8,
+    fontSize: 14,
+    fontWeight: '600',
+    textAlign: 'center',
+    borderWidth: 1,
+    borderColor: '#FF9BC2',
+  },
+  registerLink: {
+    marginTop: 12,
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  registerLinkPressed: {
+    opacity: 0.7,
+  },
+  registerLinkText: {
+    color: '#A9ACD9',
+    fontSize: 14,
+  },
+  registerLinkBold: {
+    color: '#7C5CFF',
+    fontWeight: '700',
   },
 });

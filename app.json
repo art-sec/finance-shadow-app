@@ -1,12 +1,14 @@
 {
   "expo": {
-    "name": "site-financas",
-    "slug": "site-financas",
+    "name": "Shadow Finances",
+    "slug": "shadow-finances",
     "version": "1.0.0",
+    "description": "Dashboard financeiro inteligente para análise de faturamento, controle de gastos e ROI",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "newArchEnabled": true,
+    "primaryColor": "#7C5CFF",
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
