@@ -25,8 +25,17 @@ service cloud.firestore {
       // Usuário só pode acessar seus próprios dados
       allow read, write: if request.auth.uid == userId;
       
-      // Sub-collections
+      // Sub-collections usadas pelo app
       match /finance/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      match /billing/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // Estrutura legada (compatibilidade)
+      match /subscriptions/{document=**} {
         allow read, write: if request.auth.uid == userId;
       }
     }

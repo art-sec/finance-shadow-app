@@ -55,6 +55,16 @@ service cloud.firestore {
       match /finance/{document=**} {
         allow read, write: if request.auth.uid == userId;
       }
+
+      // Dados de faturamento/gastos diários e assinaturas mensais
+      match /billing/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // Estrutura legada de assinaturas (compatibilidade)
+      match /subscriptions/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
     }
     
     // Bloqueia qualquer outro acesso

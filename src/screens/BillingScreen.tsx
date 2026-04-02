@@ -38,6 +38,7 @@ type Subscription = {
   cost: number;
   category: string;
   createdAt?: any;
+  storagePath?: 'monthly' | 'legacy';
 };
 
 type ChartPoint = {
@@ -89,9 +90,17 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
           collection(db, 'users', userId, 'billing', selectedMonth, 'daily')
         );
 
-        const subsSnapshot = await getDocs(
-          collection(db, 'users', userId, 'subscriptions')
+        const monthlySubsSnapshot = await getDocs(
+          collection(db, 'users', userId, 'billing', selectedMonth, 'subscriptions')
         );
+
+        // Fallback para estrutura legada (mantém compatibilidade com dados antigos)
+        let legacySubsSnapshot: any = null;
+        if (monthlySubsSnapshot.empty) {
+          legacySubsSnapshot = await getDocs(
+            collection(db, 'users', userId, 'subscriptions')
+          );
+        }
 
         if (!mounted) return;
 
@@ -107,10 +116,18 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
           setDailyExpenses([]);
         }
 
-        if (!subsSnapshot.empty) {
-          const subs = subsSnapshot.docs.map((docItem) => ({
+        if (!monthlySubsSnapshot.empty) {
+          const subs = monthlySubsSnapshot.docs.map((docItem) => ({
             id: docItem.id,
             ...docItem.data(),
+            storagePath: 'monthly',
+          } as Subscription));
+          setSubscriptions(subs);
+        } else if (legacySubsSnapshot && !legacySubsSnapshot.empty) {
+          const subs = legacySubsSnapshot.docs.map((docItem: any) => ({
+            id: docItem.id,
+            ...docItem.data(),
+            storagePath: 'legacy',
           } as Subscription));
           setSubscriptions(subs);
         } else {
@@ -118,7 +135,12 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
         }
       } catch (err) {
         console.error('Erro ao carregar dados:', err);
-        setSaveMessage('Falha ao carregar dados.');
+        const errorCode = (err as any)?.code;
+        if (errorCode === 'permission-denied') {
+          setSaveMessage('Sem permissão no Firestore para ler billing/subscriptions. Atualize as regras.');
+        } else {
+          setSaveMessage('Falha ao carregar dados.');
+        }
         setDailyExpenses([]);
         setSubscriptions([]);
       } finally {
@@ -254,7 +276,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
   };
 
   const handleAddSubscription = async () => {
-    if (!userId) {
+    if (!userId || !selectedMonth) {
       setSaveMessage('Erro: Usuário não definido.');
       return;
     }
@@ -279,7 +301,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     try {
       const subId = `${Date.now()}`;
       await setDoc(
-        doc(db, 'users', userId, 'subscriptions', subId),
+        doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', subId),
         {
           name: newSub.name,
           cost: newSub.cost,
@@ -299,17 +321,28 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
       }, 1000);
     } catch (err: any) {
       console.error('Erro ao salvar assinatura:', err);
-      setSaveMessage(`Erro: ${err.message}`);
+      if (err?.code === 'permission-denied') {
+        setSaveMessage('Erro: sem permissão para salvar assinatura. Libere users/{uid}/billing/{month}/subscriptions nas regras do Firestore.');
+      } else {
+        setSaveMessage(`Erro: ${err.message}`);
+      }
     } finally {
       setSavingSubscription(false);
     }
   };
 
   const handleDeleteSubscription = async (subId: string) => {
-    if (!userId) return;
+    if (!userId || !selectedMonth) return;
+
+    const targetSub = subscriptions.find((sub) => sub.id === subId);
+    const isLegacy = targetSub?.storagePath === 'legacy';
 
     try {
-      await deleteDoc(doc(db, 'users', userId, 'subscriptions', subId));
+      if (isLegacy) {
+        await deleteDoc(doc(db, 'users', userId, 'subscriptions', subId));
+      } else {
+        await deleteDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', subId));
+      }
       setSaveMessage('✓ Assinatura removida.');
       setTimeout(() => {
         setReloadTrigger(prev => prev + 1);
@@ -317,7 +350,11 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
       }, 1000);
     } catch (err: any) {
       console.error('Erro ao deletar assinatura:', err);
-      setSaveMessage(`Erro: ${err.message}`);
+      if (err?.code === 'permission-denied') {
+        setSaveMessage('Erro: sem permissão para remover assinatura. Verifique as regras do Firestore.');
+      } else {
+        setSaveMessage(`Erro: ${err.message}`);
+      }
     }
   };
 
@@ -417,7 +454,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
                 keyboardType="numeric"
                 value={currentDay}
                 onChangeText={setCurrentDay}
-                error={!!formErrors.date}
+                error={formErrors.date}
                 help={formErrors.date}
               />
               <SimpleInput
@@ -426,7 +463,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
                 keyboardType="numeric"
                 value={currentReceived}
                 onChangeText={setCurrentReceived}
-                error={!!formErrors.receivedAmount}
+                error={formErrors.receivedAmount}
                 help={formErrors.receivedAmount}
               />
             </View>
@@ -438,7 +475,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
                 keyboardType="numeric"
                 value={currentEmployeeCost}
                 onChangeText={setCurrentEmployeeCost}
-                error={!!formErrors.employeeCost}
+                error={formErrors.employeeCost}
                 help={formErrors.employeeCost}
               />
               <SimpleInput
@@ -447,7 +484,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
                 keyboardType="numeric"
                 value={currentAdsCost}
                 onChangeText={setCurrentAdsCost}
-                error={!!formErrors.adsCost}
+                error={formErrors.adsCost}
                 help={formErrors.adsCost}
               />
             </View>
@@ -458,7 +495,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
               keyboardType="numeric"
               value={currentAdsReturn}
               onChangeText={setCurrentAdsReturn}
-              error={!!formErrors.adsReturn}
+              error={formErrors.adsReturn}
               help={formErrors.adsReturn}
             />
 
@@ -504,7 +541,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
               placeholder="Ex: Adobe, Netflix"
               value={subName}
               onChangeText={setSubName}
-              error={!!subFormErrors.name}
+              error={subFormErrors.name}
               help={subFormErrors.name}
             />
 
@@ -515,7 +552,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
                 keyboardType="numeric"
                 value={subCost}
                 onChangeText={setSubCost}
-                error={!!subFormErrors.cost}
+                error={subFormErrors.cost}
                 help={subFormErrors.cost}
               />
               <SimpleInput
