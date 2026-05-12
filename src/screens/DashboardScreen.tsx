@@ -272,7 +272,7 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
 
         </ScrollView>
       ) : (
-        <BillingScreen selectedMonth={selectedMonth} userId={userId} />
+        <BillingScreen selectedMonth={selectedMonth} userId={userId} onDataChanged={() => setReloadTrigger(t => t + 1)} />
       )}
     </View>
   );

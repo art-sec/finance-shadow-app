@@ -34,12 +34,12 @@ type Subscription = {
   storagePath?: 'monthly' | 'legacy';
 };
 
-type Props = { selectedMonth?: string; userId?: string | null };
+type Props = { selectedMonth?: string; userId?: string | null; onDataChanged?: () => void };
 
 const fmt = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
 
-export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) {
+export default function BillingScreen({ selectedMonth = 'Jan', userId, onDataChanged }: Props) {
   const { width } = useWindowDimensions();
   const isWide = width >= 780;
 
@@ -120,6 +120,24 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     };
   }, [expenses, subscriptions]);
 
+  const syncToFinance = async (dailyList: DailyExpense[], subList: Subscription[]) => {
+    if (!userId) return;
+    const summary = {
+      month:           selectedMonth,
+      faturamento:     dailyList.reduce((s, e) => s + (e.receivedAmount || 0), 0),
+      anuncios:        dailyList.reduce((s, e) => s + (e.adsCost        || 0), 0),
+      funcionarios:    dailyList.reduce((s, e) => s + (e.employeeCost   || 0), 0)
+                       + subList.reduce((s, sub) => s + (sub.cost       || 0), 0),
+      retornoAnuncios: dailyList.reduce((s, e) => s + (e.adsReturn      || 0), 0),
+    };
+    await setDoc(
+      doc(db, 'users', userId, 'finance', selectedMonth),
+      { ...summary, updatedAt: serverTimestamp() },
+      { merge: true }
+    );
+    onDataChanged?.();
+  };
+
   const flashDaily = (msg: string, type: 'ok'|'err') => {
     setDailyMsgType(type); setDailyMsg(msg);
     setTimeout(() => setDailyMsg(''), 3000);
@@ -145,6 +163,8 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     setSaving(true);
     try {
       await setDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'daily', exp.date), { ...exp, updatedAt: serverTimestamp() }, { merge: true });
+      const updatedExpenses = [...expenses.filter(e => e.date !== exp.date), exp];
+      await syncToFinance(updatedExpenses, subscriptions);
       setDay('01'); setReceived(''); setEmpCost(''); setAdsCost(''); setAdsRet(''); setNotes('');
       flashDaily('Gasto registrado.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
@@ -156,6 +176,8 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     if (!userId) return;
     try {
       await deleteDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'daily', date));
+      const updatedExpenses = expenses.filter(e => e.date !== date);
+      await syncToFinance(updatedExpenses, subscriptions);
       flashDaily('Gasto removido.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
     } catch (err: any) { flashDaily(err.message, 'err'); }
@@ -171,6 +193,8 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
       await setDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', id), {
         name: subName.trim(), cost: Number(subCost), category: subCat, createdAt: serverTimestamp(),
       });
+      const newSub: Subscription = { id, name: subName.trim(), cost: Number(subCost), category: subCat, storagePath: 'monthly' };
+      await syncToFinance(expenses, [...subscriptions, newSub]);
       setSubName(''); setSubCost(''); setSubCat('software');
       flashSub('Assinatura adicionada.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
@@ -186,6 +210,8 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
       : doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', subId);
     try {
       await deleteDoc(path);
+      const updatedSubs = subscriptions.filter(s => s.id !== subId);
+      await syncToFinance(expenses, updatedSubs);
       flashSub('Assinatura removida.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
     } catch (err: any) { flashSub(err.message, 'err'); }
