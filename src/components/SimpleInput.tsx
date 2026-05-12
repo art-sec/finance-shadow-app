@@ -1,8 +1,3 @@
-/**
- * SimpleInput - Input Grande e Fácil de Usar
- * Para entrada de dados para crianças
- */
-
 import React from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -11,7 +6,7 @@ type Props = {
   value: string;
   onChangeText: (text: string) => void;
   placeholder?: string;
-  keyboardType?: 'numeric' | 'default' | 'email-address';
+  keyboardType?: 'numeric' | 'default' | 'email-address' | 'phone-pad';
   error?: string;
   help?: string;
   editable?: boolean;
@@ -35,7 +30,7 @@ export default function SimpleInput({
       <TextInput
         style={[
           styles.input,
-          error && styles.inputError,
+          !!error && styles.inputError,
           !editable && styles.inputDisabled,
         ]}
         value={value}
@@ -46,8 +41,12 @@ export default function SimpleInput({
         editable={editable}
         secureTextEntry={secureTextEntry}
       />
-      {error && <Text style={styles.errorText}>{error}</Text>}
-      {help && <Text style={styles.helpText}>{help}</Text>}
+      {/* Only one message shown: error takes priority over help */}
+      {error ? (
+        <Text style={styles.errorText}>{error}</Text>
+      ) : help ? (
+        <Text style={styles.helpText}>{help}</Text>
+      ) : null}
     </View>
   );
 }

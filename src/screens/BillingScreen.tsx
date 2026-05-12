@@ -1,649 +1,390 @@
-/**
- * Billing Screen - Gerenciamento de Faturamento e Gastos Diários
- * Refatorado com componentes simples e intuitivos
- */
-
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { collection, doc, getDocs, serverTimestamp, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
-import {
-  LineChart,
-  SimpleButton,
-  SimpleInput,
-  SimpleList,
-  SimpleListItem,
-  SimpleMetrics,
-  SimpleSection,
-} from '../components';
+import { LineChart } from '../components';
+import SectionBlock from '../components/SectionBlock';
+import MetricCard   from '../components/MetricCard';
+import { C } from '../theme';
 
 type DailyExpense = {
   date: string;
   receivedAmount: number;
-  employeeCost: number;
-  adsCost: number;
-  adsReturn: number;
-  notes?: string;
+  employeeCost:   number;
+  adsCost:        number;
+  adsReturn:      number;
+  notes?:         string;
 };
 
 type Subscription = {
-  id: string;
-  name: string;
-  cost: number;
-  category: string;
-  createdAt?: any;
+  id:           string;
+  name:         string;
+  cost:         number;
+  category:     string;
+  createdAt?:   any;
   storagePath?: 'monthly' | 'legacy';
 };
 
-type ChartPoint = {
-  label: string;
-  value: number;
-};
+type Props = { selectedMonth?: string; userId?: string | null };
 
-type Props = {
-  selectedMonth?: string;
-  userId?: string | null;
-};
+const fmt = (v: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(v);
 
 export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) {
-  // ===== ESTADOS =====
-  const [dailyExpenses, setDailyExpenses] = useState<DailyExpense[]>([]);
+  const { width } = useWindowDimensions();
+  const isWide = width >= 780;
+
+  const [expenses,      setExpenses]      = useState<DailyExpense[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [loadingData, setLoadingData] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof DailyExpense, string>>>({});
-  const [reloadTrigger, setReloadTrigger] = useState(0);
+  const [loading,       setLoading]       = useState(false);
+  const [saveMsg,       setSaveMsg]       = useState('');
+  const [saveMsgType,   setSaveMsgType]   = useState<'ok'|'err'>('ok');
+  const [reload,        setReload]        = useState(0);
 
-  // Formulário de gasto diário
-  const [currentDay, setCurrentDay] = useState('01');
-  const [currentReceived, setCurrentReceived] = useState('0');
-  const [currentEmployeeCost, setCurrentEmployeeCost] = useState('0');
-  const [currentAdsCost, setCurrentAdsCost] = useState('0');
-  const [currentAdsReturn, setCurrentAdsReturn] = useState('0');
-  const [currentNotes, setCurrentNotes] = useState('');
+  // Daily form
+  const [day,      setDay]      = useState('01');
+  const [received, setReceived] = useState('');
+  const [empCost,  setEmpCost]  = useState('');
+  const [adsCost,  setAdsCost]  = useState('');
+  const [adsRet,   setAdsRet]   = useState('');
+  const [notes,    setNotes]    = useState('');
+  const [saving,   setSaving]   = useState(false);
 
-  // Formulário de assinatura
-  const [subName, setSubName] = useState('');
-  const [subCost, setSubCost] = useState('0');
-  const [subCategory, setSubCategory] = useState('software');
-  const [subFormErrors, setSubFormErrors] = useState<Partial<Record<keyof Subscription, string>>>({});
-  const [savingSubscription, setSavingSubscription] = useState(false);
+  // Subscription form
+  const [subName, setSubName]   = useState('');
+  const [subCost, setSubCost]   = useState('');
+  const [subCat,  setSubCat]    = useState('software');
+  const [savingSub, setSavingSub] = useState(false);
 
-  // ===== CARREGAMENTO =====
   useEffect(() => {
     if (!userId || !selectedMonth) return;
-
     let mounted = true;
-
-    const loadData = async () => {
-      setLoadingData(true);
-      setSaveMessage('');
+    const load = async () => {
+      setLoading(true);
+      setSaveMsg('');
       try {
-        const dailySnapshot = await getDocs(
-          collection(db, 'users', userId, 'billing', selectedMonth, 'daily')
-        );
-
-        const monthlySubsSnapshot = await getDocs(
-          collection(db, 'users', userId, 'billing', selectedMonth, 'subscriptions')
-        );
-
-        // Fallback para estrutura legada (mantém compatibilidade com dados antigos)
-        let legacySubsSnapshot: any = null;
-        if (monthlySubsSnapshot.empty) {
-          legacySubsSnapshot = await getDocs(
-            collection(db, 'users', userId, 'subscriptions')
-          );
-        }
-
+        const [dailySnap, subSnap] = await Promise.all([
+          getDocs(collection(db, 'users', userId, 'billing', selectedMonth, 'daily')),
+          getDocs(collection(db, 'users', userId, 'billing', selectedMonth, 'subscriptions')),
+        ]);
         if (!mounted) return;
 
-        if (!dailySnapshot.empty) {
-          const expenses = dailySnapshot.docs
-            .map((docItem) => ({
-              date: docItem.id,
-              ...docItem.data(),
-            } as DailyExpense))
-            .sort((a, b) => parseInt(a.date) - parseInt(b.date));
-          setDailyExpenses(expenses);
-        } else {
-          setDailyExpenses([]);
-        }
+        setExpenses(
+          dailySnap.docs
+            .map(d => ({ date: d.id, ...d.data() } as DailyExpense))
+            .sort((a, b) => parseInt(a.date) - parseInt(b.date))
+        );
 
-        if (!monthlySubsSnapshot.empty) {
-          const subs = monthlySubsSnapshot.docs.map((docItem) => ({
-            id: docItem.id,
-            ...docItem.data(),
-            storagePath: 'monthly',
-          } as Subscription));
-          setSubscriptions(subs);
-        } else if (legacySubsSnapshot && !legacySubsSnapshot.empty) {
-          const subs = legacySubsSnapshot.docs.map((docItem: any) => ({
-            id: docItem.id,
-            ...docItem.data(),
-            storagePath: 'legacy',
-          } as Subscription));
-          setSubscriptions(subs);
+        if (!subSnap.empty) {
+          setSubscriptions(subSnap.docs.map(d => ({ id: d.id, ...d.data(), storagePath: 'monthly' } as Subscription)));
         } else {
-          setSubscriptions([]);
+          const legacySnap = await getDocs(collection(db, 'users', userId, 'subscriptions'));
+          setSubscriptions(legacySnap.docs.map(d => ({ id: d.id, ...d.data(), storagePath: 'legacy' } as Subscription)));
         }
-      } catch (err) {
-        console.error('Erro ao carregar dados:', err);
-        const errorCode = (err as any)?.code;
-        if (errorCode === 'permission-denied') {
-          setSaveMessage('Sem permissão no Firestore para ler billing/subscriptions. Atualize as regras.');
-        } else {
-          setSaveMessage('Falha ao carregar dados.');
-        }
-        setDailyExpenses([]);
-        setSubscriptions([]);
+      } catch (err: any) {
+        if (err?.code === 'permission-denied') setSaveMsg('Sem permissão para ler dados de billing.');
       } finally {
-        if (mounted) setLoadingData(false);
+        if (mounted) setLoading(false);
       }
     };
-
-    loadData();
+    load();
     return () => { mounted = false; };
-  }, [userId, selectedMonth, reloadTrigger]);
+  }, [userId, selectedMonth, reload]);
 
-  // ===== CÁLCULOS =====
   const totals = useMemo(() => {
-    const totalReceived = dailyExpenses.reduce((sum, exp) => sum + (exp.receivedAmount || 0), 0);
-    const totalEmployeeCost = dailyExpenses.reduce((sum, exp) => sum + (exp.employeeCost || 0), 0);
-    const totalAdsCost = dailyExpenses.reduce((sum, exp) => sum + (exp.adsCost || 0), 0);
-    const totalAdsReturn = dailyExpenses.reduce((sum, exp) => sum + (exp.adsReturn || 0), 0);
-    const totalSubscriptions = subscriptions.reduce((sum, sub) => sum + (sub.cost || 0), 0);
-    const totalCost = totalEmployeeCost + totalAdsCost + totalSubscriptions;
-    const netProfit = totalReceived - totalCost;
-    const employeePercentage = totalReceived > 0 ? (totalEmployeeCost / totalReceived) * 100 : 0;
-    const profitPercentage = totalReceived > 0 ? (netProfit / totalReceived) * 100 : 0;
-    const roas = totalAdsCost > 0 ? totalAdsReturn / totalAdsCost : 0;
-
-    return { totalReceived, totalEmployeeCost, totalAdsCost, totalAdsReturn, totalSubscriptions, totalCost, netProfit, employeePercentage, profitPercentage, roas };
-  }, [dailyExpenses, subscriptions]);
-
-  // ===== FORMATAÇÕES =====
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(value);
-  const formatPercentage = (value: number) => `${value.toFixed(1)}%`;
-  const formatRatio = (value: number) => `${value.toFixed(2)}x`;
-
-  // ===== VALIDAÇÃO =====
-  const validateExpense = (expense: DailyExpense) => {
-    const errors: Partial<Record<keyof DailyExpense, string>> = {};
-    if (!expense.date || !/^\d{2}$/.test(expense.date)) {
-      errors.date = 'Dia deve estar em DD (01-31).';
-    }
-    const fields: Array<'receivedAmount' | 'employeeCost' | 'adsCost' | 'adsReturn'> = [
-      'receivedAmount', 'employeeCost', 'adsCost', 'adsReturn',
-    ];
-    fields.forEach((field) => {
-      const value = expense[field];
-      if (!Number.isFinite(value) || value < 0) {
-        errors[field] = 'Use números positivos.';
-      } else if (value > 1000000000) {
-        errors[field] = 'Valor muito alto.';
-      }
-    });
-    return errors;
-  };
-
-  const validateSubscription = (sub: Partial<Subscription>) => {
-    const errors: Partial<Record<keyof Subscription, string>> = {};
-    if (!sub.name || sub.name.trim().length === 0) {
-      errors.name = 'Nome é obrigatório.';
-    }
-    if (!Number.isFinite(sub.cost) || (sub.cost || 0) <= 0) {
-      errors.cost = 'Custo deve ser maior que zero.';
-    }
-    return errors;
-  };
-
-  // ===== FUNÇÕES =====
-  const handleAddDaily = async () => {
-    if (!userId || !selectedMonth) {
-      setSaveMessage('Erro: Usuário ou mês não definido.');
-      return;
-    }
-
-    const newExpense: DailyExpense = {
-      date: currentDay.padStart(2, '0'),
-      receivedAmount: Number(currentReceived) || 0,
-      employeeCost: Number(currentEmployeeCost) || 0,
-      adsCost: Number(currentAdsCost) || 0,
-      adsReturn: Number(currentAdsReturn) || 0,
-      notes: currentNotes || undefined,
+    const r  = expenses.reduce((s, e) => s + (e.receivedAmount || 0), 0);
+    const ec = expenses.reduce((s, e) => s + (e.employeeCost  || 0), 0);
+    const ac = expenses.reduce((s, e) => s + (e.adsCost       || 0), 0);
+    const ar = expenses.reduce((s, e) => s + (e.adsReturn     || 0), 0);
+    const sc = subscriptions.reduce((s, sub) => s + (sub.cost || 0), 0);
+    const tc = ec + ac + sc;
+    const np = r - tc;
+    return {
+      revenue: r, empCost: ec, adsCost: ac, adsReturn: ar,
+      subCost: sc, totalCost: tc, netProfit: np,
+      empPct:  r > 0 ? (ec / r) * 100 : 0,
+      profPct: r > 0 ? (np / r) * 100 : 0,
+      roas:    ac > 0 ? ar / ac : 0,
     };
+  }, [expenses, subscriptions]);
 
-    const errors = validateExpense(newExpense);
-    setFormErrors(errors);
+  const flash = (msg: string, type: 'ok'|'err') => {
+    setSaveMsgType(type); setSaveMsg(msg);
+    setTimeout(() => setSaveMsg(''), 3000);
+  };
 
-    if (Object.keys(errors).length > 0) {
-      setSaveMessage('✐️ Corrija os campos antes de salvar.');
-      return;
-    }
-
+  const handleAddDaily = async () => {
+    if (!userId) return;
+    const dayNum = parseInt(day);
+    if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) { flash('Dia inválido (01-31).', 'err'); return; }
+    const exp: DailyExpense = {
+      date:           String(dayNum).padStart(2, '0'),
+      receivedAmount: Number(received) || 0,
+      employeeCost:   Number(empCost)  || 0,
+      adsCost:        Number(adsCost)  || 0,
+      adsReturn:      Number(adsRet)   || 0,
+      notes:          notes || undefined,
+    };
     setSaving(true);
-    setSaveMessage('');
-
     try {
-      await setDoc(
-        doc(db, 'users', userId, 'billing', selectedMonth, 'daily', newExpense.date),
-        { ...newExpense, updatedAt: serverTimestamp() },
-        { merge: true }
-      );
-
-      setSaveMessage('✓ Gasto registrado com sucesso.');
-      setCurrentDay('01');
-      setCurrentReceived('0');
-      setCurrentEmployeeCost('0');
-      setCurrentAdsCost('0');
-      setCurrentAdsReturn('0');
-      setCurrentNotes('');
-
-      setTimeout(() => {
-        setReloadTrigger(prev => prev + 1);
-        setSaveMessage('');
-      }, 1000);
-    } catch (err: any) {
-      console.error('Erro ao salvar gasto:', err);
-      setSaveMessage(`Erro: ${err.message || 'Tente novamente'}`);
-    } finally {
-      setSaving(false);
-    }
+      await setDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'daily', exp.date), { ...exp, updatedAt: serverTimestamp() }, { merge: true });
+      setDay('01'); setReceived(''); setEmpCost(''); setAdsCost(''); setAdsRet(''); setNotes('');
+      flash('Gasto registrado.', 'ok');
+      setTimeout(() => setReload(r => r + 1), 800);
+    } catch (err: any) { flash(err.message, 'err'); }
+    finally { setSaving(false); }
   };
 
   const handleDeleteDaily = async (date: string) => {
-    if (!userId || !selectedMonth) return;
-
+    if (!userId) return;
     try {
       await deleteDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'daily', date));
-      setSaveMessage('✓ Gasto removido.');
-      setTimeout(() => {
-        setReloadTrigger(prev => prev + 1);
-        setSaveMessage('');
-      }, 1000);
-    } catch (err: any) {
-      console.error('Erro ao deletar gasto:', err);
-      setSaveMessage(`Erro: ${err.message}`);
-    }
+      flash('Gasto removido.', 'ok');
+      setTimeout(() => setReload(r => r + 1), 800);
+    } catch (err: any) { flash(err.message, 'err'); }
   };
 
-  const handleAddSubscription = async () => {
-    if (!userId || !selectedMonth) {
-      setSaveMessage('Erro: Usuário não definido.');
-      return;
-    }
-
-    const newSub: Partial<Subscription> = {
-      name: subName.trim(),
-      cost: Number(subCost) || 0,
-      category: subCategory,
-    };
-
-    const errors = validateSubscription(newSub);
-    setSubFormErrors(errors);
-
-    if (Object.keys(errors).length > 0) {
-      setSaveMessage('✐️ Corrija os campos da assinatura.');
-      return;
-    }
-
-    setSavingSubscription(true);
-    setSaveMessage('');
-
+  const handleAddSub = async () => {
+    if (!userId) return;
+    if (!subName.trim()) { flash('Nome da assinatura é obrigatório.', 'err'); return; }
+    if (!Number(subCost) || Number(subCost) <= 0) { flash('Custo deve ser maior que zero.', 'err'); return; }
+    setSavingSub(true);
     try {
-      const subId = `${Date.now()}`;
-      await setDoc(
-        doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', subId),
-        {
-          name: newSub.name,
-          cost: newSub.cost,
-          category: newSub.category,
-          createdAt: serverTimestamp(),
-        }
-      );
-
-      setSaveMessage('✓ Assinatura adicionada com sucesso.');
-      setSubName('');
-      setSubCost('0');
-      setSubCategory('software');
-
-      setTimeout(() => {
-        setReloadTrigger(prev => prev + 1);
-        setSaveMessage('');
-      }, 1000);
-    } catch (err: any) {
-      console.error('Erro ao salvar assinatura:', err);
-      if (err?.code === 'permission-denied') {
-        setSaveMessage('Erro: sem permissão para salvar assinatura. Libere users/{uid}/billing/{month}/subscriptions nas regras do Firestore.');
-      } else {
-        setSaveMessage(`Erro: ${err.message}`);
-      }
-    } finally {
-      setSavingSubscription(false);
-    }
+      const id = String(Date.now());
+      await setDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', id), {
+        name: subName.trim(), cost: Number(subCost), category: subCat, createdAt: serverTimestamp(),
+      });
+      setSubName(''); setSubCost(''); setSubCat('software');
+      flash('Assinatura adicionada.', 'ok');
+      setTimeout(() => setReload(r => r + 1), 800);
+    } catch (err: any) { flash(err.message, 'err'); }
+    finally { setSavingSub(false); }
   };
 
-  const handleDeleteSubscription = async (subId: string) => {
-    if (!userId || !selectedMonth) return;
-
-    const targetSub = subscriptions.find((sub) => sub.id === subId);
-    const isLegacy = targetSub?.storagePath === 'legacy';
-
+  const handleDeleteSub = async (subId: string) => {
+    if (!userId) return;
+    const sub = subscriptions.find(s => s.id === subId);
+    const path = sub?.storagePath === 'legacy'
+      ? doc(db, 'users', userId, 'subscriptions', subId)
+      : doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', subId);
     try {
-      if (isLegacy) {
-        await deleteDoc(doc(db, 'users', userId, 'subscriptions', subId));
-      } else {
-        await deleteDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', subId));
-      }
-      setSaveMessage('✓ Assinatura removida.');
-      setTimeout(() => {
-        setReloadTrigger(prev => prev + 1);
-        setSaveMessage('');
-      }, 1000);
-    } catch (err: any) {
-      console.error('Erro ao deletar assinatura:', err);
-      if (err?.code === 'permission-denied') {
-        setSaveMessage('Erro: sem permissão para remover assinatura. Verifique as regras do Firestore.');
-      } else {
-        setSaveMessage(`Erro: ${err.message}`);
-      }
-    }
+      await deleteDoc(path);
+      flash('Assinatura removida.', 'ok');
+      setTimeout(() => setReload(r => r + 1), 800);
+    } catch (err: any) { flash(err.message, 'err'); }
   };
 
-  // ===== GRÁFICOS =====
-  const receivedSeries: ChartPoint[] = dailyExpenses.map((exp) => ({
-    label: `D${exp.date}`,
-    value: exp.receivedAmount || 0,
-  }));
-
-  const expenseSeries: ChartPoint[] = dailyExpenses.map((exp) => ({
-    label: `D${exp.date}`,
-    value: (exp.employeeCost || 0) + (exp.adsCost || 0),
-  }));
-
-  const profitSeries: ChartPoint[] = dailyExpenses.map((exp) => ({
-    label: `D${exp.date}`,
-    value: (exp.receivedAmount || 0) - ((exp.employeeCost || 0) + (exp.adsCost || 0)),
-  }));
-
-  // ===== MÉTRICAS =====
   const metrics = [
-    { label: 'Faturamento', value: formatCurrency(totals.totalReceived), color: '#7C5CFF', icon: '💰' },
-    { label: '% Funcionários', value: formatPercentage(totals.employeePercentage), color: '#4EC5FF', icon: '👥' },
-    { label: 'Lucro Líquido', value: formatCurrency(totals.netProfit), color: '#6DDFB5', icon: '📊' },
-    { label: '% Lucro', value: formatPercentage(totals.profitPercentage), color: '#F59E76', icon: '📈' },
-    { label: 'Assinaturas', value: formatCurrency(totals.totalSubscriptions), color: '#FF7F50', icon: '🔄' },
-    { label: 'ROAS', value: formatRatio(totals.roas), color: '#F0A500', icon: '🎯' },
+    { label: 'Faturamento',    value: fmt(totals.revenue),   icon: '💰', color: C.primary },
+    { label: 'Lucro Líquido',  value: fmt(totals.netProfit), icon: '📈', color: totals.netProfit >= 0 ? C.green : C.red },
+    { label: '% Lucro',        value: `${totals.profPct.toFixed(1)}%`, icon: '🎯', color: C.cyan },
+    { label: 'Custo Total',    value: fmt(totals.totalCost), icon: '💸', color: C.red },
+    { label: 'Assinaturas',    value: fmt(totals.subCost),   icon: '🔄', color: C.amber },
+    { label: 'ROAS',           value: `${totals.roas.toFixed(2)}x`, icon: '📢', color: C.violet },
   ];
 
-  // ===== LISTA DE GASTOS =====
-  const dailyExpenseItems: SimpleListItem[] = dailyExpenses.map((exp) => ({
-    id: exp.date,
-    title: `Dia ${exp.date} - ${formatCurrency(exp.receivedAmount)}`,
-    subtitle: `👥 ${formatCurrency(exp.employeeCost)} | 📢 ${formatCurrency(exp.adsCost)}`,
-    value: exp.notes ? `📝 ${exp.notes}` : '',
-  }));
+  const receivedSeries = expenses.map(e => ({ label: `D${e.date}`, value: e.receivedAmount || 0 }));
+  const expenseSeries  = expenses.map(e => ({ label: `D${e.date}`, value: (e.employeeCost || 0) + (e.adsCost || 0) }));
+  const profitSeries   = expenses.map(e => ({ label: `D${e.date}`, value: (e.receivedAmount || 0) - ((e.employeeCost || 0) + (e.adsCost || 0)) }));
 
-  // ===== LISTA DE ASSINATURAS =====
-  const subscriptionItems: SimpleListItem[] = subscriptions.map((sub) => ({
-    id: sub.id,
-    title: sub.name,
-    subtitle: sub.category,
-    value: formatCurrency(sub.cost),
-  }));
-
-  // ===== RENDER =====
   return (
-    <View style={styles.screen}>
-      <ScrollView
-        contentContainerStyle={styles.content}
-        keyboardShouldPersistTaps="handled"
-      >
-        {/* Cabeçalho */}
-        <SimpleSection title="Faturamento e Gastos" icon="📊">
-          <Text style={styles.subtitle}>Gastos diários de {selectedMonth}</Text>
-        </SimpleSection>
+    <ScrollView style={styles.root} contentContainerStyle={[styles.content, isWide && styles.contentWide]} keyboardShouldPersistTaps="handled">
 
-        {/* Carregando */}
-        {loadingData && (
-          <SimpleSection title="">
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#4CAF50" />
-              <Text style={styles.loadingText}>Carregando gastos...</Text>
-            </View>
-          </SimpleSection>
-        )}
+      {/* Loading */}
+      {loading && (
+        <View style={styles.loadingBar}>
+          <ActivityIndicator size="small" color={C.primary} />
+          <Text style={styles.loadingText}>Carregando dados de {selectedMonth}…</Text>
+        </View>
+      )}
 
-        {/* Métricas */}
-        <SimpleSection title="Sumário do Mês" icon="📈">
-          <SimpleMetrics metrics={metrics} columns={2} />
-        </SimpleSection>
+      {/* Flash message */}
+      {saveMsg ? (
+        <View style={[styles.flash, saveMsgType === 'ok' ? styles.flashOk : styles.flashErr]}>
+          <Text style={[styles.flashText, { color: saveMsgType === 'ok' ? C.green : C.red }]}>
+            {saveMsgType === 'ok' ? '✓ ' : '✕ '}{saveMsg}
+          </Text>
+        </View>
+      ) : null}
 
-        {/* Gráficos */}
-        {dailyExpenses.length > 0 && (
-          <SimpleSection title="Tendências Diárias" icon="📉">
-            <View style={styles.chartsGrid}>
-              <View style={styles.chart}>
-                <LineChart title="Faturamento Diário" points={receivedSeries} color="#4CAF50" />
+      {/* Metrics */}
+      <SectionBlock title={`Sumário — ${selectedMonth}`} subtitle="Baseado nos gastos diários registrados">
+        <View style={styles.metricsGrid}>
+          {metrics.map((m, i) => <MetricCard key={i} {...m} />)}
+        </View>
+      </SectionBlock>
+
+      {/* Charts */}
+      {expenses.length > 0 && (
+        <SectionBlock title="Tendências Diárias" subtitle="Evolução ao longo do mês" noPad>
+          <View style={[styles.chartsGrid, isWide && styles.chartsGridWide]}>
+            {[
+              { title: 'Faturamento Diário', points: receivedSeries, color: C.primary },
+              { title: 'Gastos Diários',     points: expenseSeries,  color: C.red     },
+              { title: 'Lucro Diário',       points: profitSeries,   color: C.green   },
+            ].map((c, i) => (
+              <View key={i} style={[styles.chartCell, isWide && styles.chartCellWide]}>
+                <LineChart {...c} />
               </View>
-              <View style={styles.chart}>
-                <LineChart title="Gastos Diários" points={expenseSeries} color="#F44336" />
-              </View>
-              <View style={styles.chart}>
-                <LineChart title="Lucro Diário" points={profitSeries} color="#FF9800" />
-              </View>
-            </View>
-          </SimpleSection>
-        )}
-
-        {/* Formulário de Gasto Diário */}
-        <SimpleSection title="Registrar Novo Gasto" icon="➕">
-          <View style={styles.formGrid}>
-            <View style={styles.formRow}>
-              <SimpleInput
-                label="Dia"
-                placeholder="01-31"
-                keyboardType="numeric"
-                value={currentDay}
-                onChangeText={setCurrentDay}
-                error={formErrors.date}
-                help={formErrors.date}
-              />
-              <SimpleInput
-                label="Faturamento"
-                placeholder="Ex: 5000"
-                keyboardType="numeric"
-                value={currentReceived}
-                onChangeText={setCurrentReceived}
-                error={formErrors.receivedAmount}
-                help={formErrors.receivedAmount}
-              />
-            </View>
-
-            <View style={styles.formRow}>
-              <SimpleInput
-                label="Gasto com Funcionários"
-                placeholder="Ex: 1000"
-                keyboardType="numeric"
-                value={currentEmployeeCost}
-                onChangeText={setCurrentEmployeeCost}
-                error={formErrors.employeeCost}
-                help={formErrors.employeeCost}
-              />
-              <SimpleInput
-                label="Gasto com Anúncios"
-                placeholder="Ex: 500"
-                keyboardType="numeric"
-                value={currentAdsCost}
-                onChangeText={setCurrentAdsCost}
-                error={formErrors.adsCost}
-                help={formErrors.adsCost}
-              />
-            </View>
-
-            <SimpleInput
-              label="Retorno dos Anúncios"
-              placeholder="Ex: 2000"
-              keyboardType="numeric"
-              value={currentAdsReturn}
-              onChangeText={setCurrentAdsReturn}
-              error={formErrors.adsReturn}
-              help={formErrors.adsReturn}
-            />
-
-            <SimpleInput
-              label="Observações (Opcional)"
-              placeholder="Ex: Dia com vendas extras"
-              value={currentNotes}
-              onChangeText={setCurrentNotes}
-            />
-
-            {saveMessage && (
-              <Text style={[styles.message, saveMessage.includes('sucesso') ? styles.successMessage : styles.errorMessage]}>
-                {saveMessage}
-              </Text>
-            )}
-
-            <SimpleButton
-              label="💾 Adicionar Gasto"
-              onPress={handleAddDaily}
-              disabled={saving}
-              loading={saving}
-              size="large"
-            />
+            ))}
           </View>
-        </SimpleSection>
+        </SectionBlock>
+      )}
 
-        {/* Lista de Gastos */}
-        {dailyExpenses.length > 0 && (
-          <SimpleSection title="Gastos Registrados" icon="📋">
-            <SimpleList
-              items={dailyExpenseItems}
-              onDelete={handleDeleteDaily}
-              empty="Nenhum gasto registrado"
-            />
-          </SimpleSection>
-        )}
+      {/* Daily expense form */}
+      <SectionBlock title="Registrar Gasto Diário" subtitle="Dados do dia específico">
+        <View style={[styles.formGrid, isWide && styles.formGridWide]}>
+          <BField label="Dia (01-31)"            value={day}      onChange={setDay}      placeholder="01" numeric />
+          <BField label="Faturamento"             value={received} onChange={setReceived} placeholder="0"  numeric prefix="R$" />
+          <BField label="Custo Funcionários"      value={empCost}  onChange={setEmpCost}  placeholder="0"  numeric prefix="R$" />
+          <BField label="Custo Anúncios"          value={adsCost}  onChange={setAdsCost}  placeholder="0"  numeric prefix="R$" />
+          <BField label="Retorno dos Anúncios"    value={adsRet}   onChange={setAdsRet}   placeholder="0"  numeric prefix="R$" />
+          <BField label="Observações (opcional)"  value={notes}    onChange={setNotes}    placeholder="Ex: promoção"  />
+        </View>
+        <Pressable style={({ pressed }) => [styles.btn, saving && styles.btnDisabled, pressed && { opacity: 0.85 }]} onPress={handleAddDaily} disabled={saving}>
+          {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnText}>+ Registrar dia</Text>}
+        </Pressable>
+      </SectionBlock>
 
-        {/* Formulário de Assinatura */}
-        <SimpleSection title="Assinaturas Mensais" icon="🔄">
-          <View style={styles.formGrid}>
-            <SimpleInput
-              label="Nome da Assinatura"
-              placeholder="Ex: Adobe, Netflix"
-              value={subName}
-              onChangeText={setSubName}
-              error={subFormErrors.name}
-              help={subFormErrors.name}
-            />
-
-            <View style={styles.formRow}>
-              <SimpleInput
-                label="Custo Mensal"
-                placeholder="Ex: 99"
-                keyboardType="numeric"
-                value={subCost}
-                onChangeText={setSubCost}
-                error={subFormErrors.cost}
-                help={subFormErrors.cost}
-              />
-              <SimpleInput
-                label="Categoria"
-                placeholder="Ex: software"
-                value={subCategory}
-                onChangeText={setSubCategory}
-              />
+      {/* Daily list */}
+      {expenses.length > 0 && (
+        <SectionBlock title={`Gastos Registrados (${expenses.length})`} noPad>
+          {expenses.map((exp, i) => (
+            <View key={exp.date} style={[styles.listRow, i < expenses.length - 1 && styles.listSep]}>
+              <View style={styles.listDayBadge}>
+                <Text style={styles.listDayText}>{exp.date}</Text>
+              </View>
+              <View style={styles.listBody}>
+                <Text style={styles.listTitle}>{fmt(exp.receivedAmount)}</Text>
+                <Text style={styles.listSub}>
+                  👥 {fmt(exp.employeeCost)}  ·  📢 {fmt(exp.adsCost)}
+                  {exp.notes ? `  ·  ${exp.notes}` : ''}
+                </Text>
+              </View>
+              <Pressable style={({ pressed }) => [styles.delBtn, pressed && { opacity: 0.6 }]} onPress={() => handleDeleteDaily(exp.date)}>
+                <Text style={styles.delBtnText}>✕</Text>
+              </Pressable>
             </View>
+          ))}
+        </SectionBlock>
+      )}
 
-            <SimpleButton
-              label="➕ Adicionar Assinatura"
-              onPress={handleAddSubscription}
-              disabled={savingSubscription}
-              loading={savingSubscription}
-              size="large"
-            />
-          </View>
-        </SimpleSection>
+      {/* Subscription form */}
+      <SectionBlock title="Assinaturas Mensais" subtitle="Custos fixos recorrentes">
+        <View style={[styles.formGrid, isWide && styles.formGridWide]}>
+          <BField label="Nome" value={subName} onChange={setSubName} placeholder="Ex: Adobe, Shopify" />
+          <BField label="Custo Mensal" value={subCost} onChange={setSubCost} placeholder="0" numeric prefix="R$" />
+          <BField label="Categoria" value={subCat} onChange={setSubCat} placeholder="software" />
+        </View>
+        <Pressable style={({ pressed }) => [styles.btn, savingSub && styles.btnDisabled, pressed && { opacity: 0.85 }]} onPress={handleAddSub} disabled={savingSub}>
+          {savingSub ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnText}>+ Adicionar assinatura</Text>}
+        </Pressable>
+      </SectionBlock>
 
-        {/* Lista de Assinaturas */}
-        {subscriptions.length > 0 && (
-          <SimpleSection title="Assinaturas Ativas" icon="✓">
-            <SimpleList
-              items={subscriptionItems}
-              onDelete={handleDeleteSubscription}
-              empty="Nenhuma assinatura"
-            />
-          </SimpleSection>
-        )}
-      </ScrollView>
+      {/* Subscription list */}
+      {subscriptions.length > 0 && (
+        <SectionBlock title={`Assinaturas Ativas (${subscriptions.length})`} noPad>
+          {subscriptions.map((sub, i) => (
+            <View key={sub.id} style={[styles.listRow, i < subscriptions.length - 1 && styles.listSep]}>
+              <View style={[styles.listDayBadge, { backgroundColor: C.violetBg }]}>
+                <Text style={[styles.listDayText, { color: C.violet }]}>🔄</Text>
+              </View>
+              <View style={styles.listBody}>
+                <Text style={styles.listTitle}>{sub.name}</Text>
+                <Text style={styles.listSub}>{sub.category}</Text>
+              </View>
+              <Text style={[styles.listTitle, { color: C.red, marginRight: 12 }]}>{fmt(sub.cost)}</Text>
+              <Pressable style={({ pressed }) => [styles.delBtn, pressed && { opacity: 0.6 }]} onPress={() => handleDeleteSub(sub.id)}>
+                <Text style={styles.delBtnText}>✕</Text>
+              </Pressable>
+            </View>
+          ))}
+        </SectionBlock>
+      )}
+
+    </ScrollView>
+  );
+}
+
+function BField({ label, value, onChange, placeholder, numeric, prefix }: any) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={bfS.wrap}>
+      <Text style={bfS.label}>{label}</Text>
+      <View style={[bfS.row, focused && bfS.focused]}>
+        {prefix ? <Text style={bfS.prefix}>{prefix}</Text> : null}
+        <TextInput
+          style={bfS.input}
+          value={value}
+          onChangeText={v => onChange(numeric ? v.replace(/[^0-9]/g, '') : v)}
+          placeholder={placeholder}
+          placeholderTextColor={C.text3}
+          keyboardType={numeric ? 'numeric' : 'default'}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+        />
+      </View>
     </View>
   );
 }
 
+const bfS = StyleSheet.create({
+  wrap:    { flex: 1, minWidth: '45%', gap: 6 },
+  label:   { fontSize: 12, fontWeight: '600', color: C.text2, letterSpacing: 0.3 },
+  row:     { flexDirection: 'row', alignItems: 'center', height: 44, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgInput, paddingHorizontal: 12, gap: 6 },
+  focused: { borderColor: C.primary, /* @ts-ignore */ boxShadow: '0 0 0 3px rgba(124,92,255,0.12)' },
+  prefix:  { fontSize: 13, color: C.text3, fontWeight: '600' },
+  input:   { flex: 1, fontSize: 15, color: C.text1 },
+});
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#0B0B1A',
+  root:    { flex: 1, backgroundColor: C.bgBase },
+  content: { padding: 16, gap: 16, paddingBottom: 48, maxWidth: 1180, width: '100%', alignSelf: 'center' },
+  contentWide: { paddingHorizontal: 24 },
+
+  loadingBar:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bgCard, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 10 },
+  loadingText: { fontSize: 13, color: C.text2 },
+
+  flash:    { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1 },
+  flashOk:  { backgroundColor: C.greenBg, borderColor: C.green },
+  flashErr: { backgroundColor: C.redBg,   borderColor: C.red   },
+  flashText: { fontSize: 13, fontWeight: '600' },
+
+  metricsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
+
+  chartsGrid:     { gap: 0 },
+  chartsGridWide: { flexDirection: 'row', flexWrap: 'wrap' },
+  chartCell:      { borderBottomWidth: 1, borderBottomColor: C.border },
+  chartCellWide:  { width: '33.33%', borderRightWidth: 1, borderRightColor: C.border, borderBottomWidth: 0 },
+
+  formGrid:     { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 14 },
+  formGridWide: {},
+
+  btn: {
+    height: 46, borderRadius: 10, alignItems: 'center', justifyContent: 'center',
+    // @ts-ignore
+    background: 'linear-gradient(135deg, #7C5CFF 0%, #4A2FC9 100%)',
+    backgroundColor: C.primary,
   },
-  content: {
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    gap: 16,
-    paddingBottom: 40,
-    alignSelf: 'center',
-    width: '100%',
-    maxWidth: 1180,
-  },
-  subtitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#A9ACD9',
-  },
-  loadingContainer: {
-    alignItems: 'center',
-    paddingVertical: 20,
-    gap: 12,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#B4B8E6',
-    fontWeight: '500',
-  },
-  chartsGrid: {
-    gap: 16,
-  },
-  chart: {
-    borderRadius: 14,
-    overflow: 'hidden',
-    backgroundColor: '#141732',
-    borderWidth: 1,
-    borderColor: '#2B2F63',
-  },
-  formGrid: {
-    gap: 16,
-  },
-  formRow: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  message: {
-    fontSize: 14,
-    marginBottom: 12,
-    textAlign: 'center',
-    fontWeight: '600',
-  },
-  successMessage: {
-    color: '#6DDFB5',
-  },
-  errorMessage: {
-    color: '#FF9BC2',
-  },
+  btnDisabled: { opacity: 0.55 },
+  btnText:     { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  listRow:     { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, gap: 12 },
+  listSep:     { borderBottomWidth: 1, borderBottomColor: C.border },
+  listDayBadge:{ width: 40, height: 40, borderRadius: 10, backgroundColor: C.primaryBg, alignItems: 'center', justifyContent: 'center' },
+  listDayText: { fontSize: 13, fontWeight: '700', color: C.primary },
+  listBody:    { flex: 1 },
+  listTitle:   { fontSize: 14, fontWeight: '700', color: C.text1, marginBottom: 2 },
+  listSub:     { fontSize: 12, color: C.text2 },
+  delBtn:      { width: 28, height: 28, borderRadius: 8, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center' },
+  delBtnText:  { fontSize: 11, color: C.text3, fontWeight: '700' },
 });

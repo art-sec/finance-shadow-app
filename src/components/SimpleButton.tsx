@@ -1,10 +1,5 @@
-/**
- * SimpleButton - Botão Grande e Intuitivo
- * Perfeito para uso mobile e infantil
- */
-
 import React from 'react';
-import { Pressable, StyleSheet, Text, ActivityIndicator, View } from 'react-native';
+import { Pressable, StyleSheet, Text, ActivityIndicator } from 'react-native';
 
 type Props = {
   label: string;
@@ -36,7 +31,7 @@ export default function SimpleButton({
       disabled={disabled || loading}
     >
       {loading ? (
-        <ActivityIndicator color="#FFF" size="large" />
+        <ActivityIndicator color="#FFF" size={size === 'small' ? 'small' : 'small'} />
       ) : (
         <Text style={[styles.text, styles[`text-${size}`]]}>
           {label}

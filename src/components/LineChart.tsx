@@ -1,5 +1,5 @@
- import React, { useMemo, useState } from 'react';
-import { StyleSheet, Text, View, useWindowDimensions } from 'react-native';
+import React, { useMemo, useState, useCallback } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 
 export type LineChartPoint = {
   label: string;
@@ -12,111 +12,86 @@ type Props = {
   color: string;
 };
 
+const LABEL_W = 44;
+const PADDING_TOP = 20;
+const PADDING_BOTTOM = 4;
+const PADDING_RIGHT = 16;
+const SVG_H = 190;
+const CHART_H = SVG_H - PADDING_TOP - PADDING_BOTTOM;
+
+const formatNumber = (n: number) => {
+  if (n === 0) return '0';
+  if (Math.abs(n) >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (Math.abs(n) >= 1_000) return (n / 1_000).toFixed(0) + 'K';
+  return n.toFixed(n % 1 !== 0 ? 2 : 0);
+};
+
 export default function LineChart({ title, points, color }: Props) {
-  const { width } = useWindowDimensions();
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  
-  // Garante que temos exatamente os dados passados, sem filtros
-  const chartData = useMemo(() => {
-    return points.map(p => ({
+  const [svgWidth, setSvgWidth] = useState(320);
+  const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
+
+  const onContainerLayout = useCallback((e: any) => {
+    const w = e.nativeEvent.layout.width;
+    if (w > 0) setSvgWidth(w);
+  }, []);
+
+  const data = useMemo(() =>
+    points.map(p => ({
       ...p,
-      value: typeof p.value === 'number' && Number.isFinite(p.value) ? p.value : 0
-    }));
-  }, [points]);
+      value: Number.isFinite(p.value) ? p.value : 0,
+    })), [points]);
 
-  // Encontra max/min apenas dentre valores reais (não zerados)
-  const realValues = useMemo(() => {
-    return chartData.filter(p => p.value > 0).map(p => p.value);
-  }, [chartData]);
+  const { yMax, gridLines } = useMemo(() => {
+    const positives = data.filter(p => p.value > 0).map(p => p.value);
+    if (positives.length === 0) return { yMax: 10, gridLines: [0, 2, 4, 6, 8, 10] };
 
-  const maxValue = useMemo(() => {
-    return realValues.length > 0 ? Math.max(...realValues) : 1;
-  }, [realValues]);
-
-  // Calcula escala com padding
-  const { yMin, yMax, step, gridLines } = useMemo(() => {
-    if (maxValue === 0) {
-      return { yMin: 0, yMax: 10, step: 2, gridLines: [0, 2, 4, 6, 8, 10] };
-    }
-
-    const yMax = maxValue * 1.2; // 20% padding acima
-    const range = yMax; // começa sempre de 0
-    
-    // Calcula step inteligente
+    const rawMax = Math.max(...positives) * 1.25;
     let step = 1;
-    if (range > 1000) {
-      step = Math.pow(10, Math.floor(Math.log10(range)) - 1);
-      step = Math.ceil(range / 5 / step) * step;
-    } else if (range > 100) {
-      step = Math.ceil(range / 5 / 10) * 10;
-    } else if (range > 10) {
-      step = Math.ceil(range / 5);
+    if (rawMax > 1_000) {
+      const mag = Math.pow(10, Math.floor(Math.log10(rawMax)) - 1);
+      step = Math.ceil(rawMax / 5 / mag) * mag;
+    } else if (rawMax > 100) {
+      step = Math.ceil(rawMax / 5 / 10) * 10;
+    } else if (rawMax > 10) {
+      step = Math.ceil(rawMax / 5);
     }
 
-    const gridLines = [];
-    for (let i = 0; i <= yMax; i += step) {
-      if (i <= yMax) gridLines.push(i);
+    const lines: number[] = [];
+    for (let v = 0; v <= rawMax + step; v += step) {
+      lines.push(v);
+      if (lines.length > 6) break;
     }
+    return { yMax: lines[lines.length - 1], gridLines: lines };
+  }, [data]);
 
-    return { yMin: 0, yMax, step, gridLines };
-  }, [maxValue]);
+  const chartW = svgWidth - LABEL_W - PADDING_RIGHT;
 
-  const SVG_WIDTH = useMemo(() => {
-    if (width < 430) {
-      return Math.max(220, width - 130);
-    }
-    if (width < 780) {
-      return 280;
-    }
-    if (width < 1200) {
-      return 320;
-    }
-    return 360;
-  }, [width]);
+  const getXY = useCallback((idx: number, val: number) => ({
+    x: LABEL_W + (idx / Math.max(data.length - 1, 1)) * chartW,
+    y: PADDING_TOP + CHART_H - (val / yMax) * CHART_H,
+  }), [data.length, chartW, yMax]);
 
-  const SVG_HEIGHT = width < 430 ? 210 : 240;
-  const PADDING_TOP = 10;
-  const PADDING_BOTTOM = 30;
-  const PADDING_LEFT = 10;
-  const PADDING_RIGHT = 10;
+  const { lineStr, fillStr } = useMemo(() => {
+    if (data.length === 0) return { lineStr: '', fillStr: '' };
+    const pts = data.map((p, i) => getXY(i, p.value));
+    const lineStr = pts.map(({ x, y }) => `${x},${y}`).join(' ');
+    const bottomY = PADDING_TOP + CHART_H;
+    const fillStr = [
+      ...pts.map(({ x, y }) => `${x},${y}`),
+      `${pts[pts.length - 1].x},${bottomY}`,
+      `${pts[0].x},${bottomY}`,
+    ].join(' ');
+    return { lineStr, fillStr };
+  }, [data, getXY]);
 
-  const chartAreaWidth = SVG_WIDTH - PADDING_LEFT - PADDING_RIGHT;
-  const chartAreaHeight = SVG_HEIGHT - PADDING_TOP - PADDING_BOTTOM;
+  const gradId = `g${title.replace(/\W/g, '')}`;
 
-  // Converte dado para coordenadas SVG
-  const getPoint = (index: number, value: number) => {
-    const x = PADDING_LEFT + (index / (chartData.length - 1 || 1)) * chartAreaWidth;
-    const y = PADDING_TOP + chartAreaHeight - ((value - yMin) / (yMax - yMin)) * chartAreaHeight;
-    return { x, y };
-  };
-
-  // Monta string de pontos para polyline
-  const pointsString = useMemo(() => {
-    return chartData
-      .map((p, idx) => {
-        const { x, y } = getPoint(idx, p.value);
-        return `${x},${y}`;
-      })
-      .join(' ');
-  }, [chartData, yMin, yMax]);
-
-  const formatNumber = (num: number) => {
-    if (num === 0) return '0';
-    if (Math.abs(num) >= 1000000) {
-      return (num / 1000000).toFixed(1) + 'M';
-    }
-    if (Math.abs(num) >= 1000) {
-      return (num / 1000).toFixed(0) + 'K';
-    }
-    return Math.round(num).toString();
-  };
-
-  if (chartData.length === 0) {
+  if (data.length === 0) {
     return (
       <View style={styles.container}>
         <Text style={styles.title}>{title}</Text>
-        <View style={styles.emptyState}>
-          <Text style={styles.emptyStateText}>Sem dados para exibir</Text>
+        <View style={styles.empty}>
+          <Text style={styles.emptyText}>Sem dados</Text>
         </View>
       </View>
     );
@@ -125,129 +100,165 @@ export default function LineChart({ title, points, color }: Props) {
   return (
     <View style={styles.container}>
       <Text style={styles.title}>{title}</Text>
-      <View style={styles.chartWrapper}>
-        {/* Y-Axis Labels */}
-        <View style={[styles.yAxisLabels, { width: width < 430 ? 42 : 50, height: SVG_HEIGHT }] }>
-          {gridLines.map((val, idx) => (
-            <View key={idx} style={styles.yLabelRow}>
-              <Text style={styles.yLabel}>{formatNumber(val)}</Text>
-            </View>
-          ))}
-        </View>
 
-        {/* SVG Chart Area */}
-        <View style={[styles.svgWrapper, { width: SVG_WIDTH, height: SVG_HEIGHT }]}>
-          <svg width={SVG_WIDTH} height={SVG_HEIGHT} viewBox={`0 0 ${SVG_WIDTH} ${SVG_HEIGHT}`} style={styles.svg}>
-            {/* Grid Lines */}
-            {gridLines.map((val, idx) => {
-              const yPos = PADDING_TOP + chartAreaHeight - ((val - yMin) / (yMax - yMin)) * chartAreaHeight;
-              return (
-                <line
-                  key={`grid-${idx}`}
-                  x1={PADDING_LEFT}
-                  y1={yPos}
-                  x2={SVG_WIDTH - PADDING_RIGHT}
-                  y2={yPos}
-                  stroke="#2B2F63"
-                  strokeWidth="1"
-                  opacity={val === 0 ? 0.4 : 0.15}
+      <View style={styles.svgWrap} onLayout={onContainerLayout}>
+        <svg
+          width={svgWidth}
+          height={SVG_H}
+          viewBox={`0 0 ${svgWidth} ${SVG_H}`}
+          style={{ display: 'block' }}
+        >
+          <defs>
+            <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.30" />
+              <stop offset="85%" stopColor={color} stopOpacity="0.03" />
+            </linearGradient>
+            <clipPath id={`clip-${gradId}`}>
+              <rect x={LABEL_W} y={0} width={chartW + PADDING_RIGHT} height={SVG_H} />
+            </clipPath>
+          </defs>
+
+          {/* Y-axis labels */}
+          {[...gridLines].reverse().map((val, i) => {
+            const y = PADDING_TOP + CHART_H - (val / yMax) * CHART_H;
+            return (
+              <text
+                key={i}
+                x={LABEL_W - 8}
+                y={y + 4}
+                textAnchor="end"
+                fill="#6B70A3"
+                fontSize="10"
+                fontFamily="monospace"
+              >
+                {formatNumber(val)}
+              </text>
+            );
+          })}
+
+          {/* Grid lines */}
+          {gridLines.map((val, i) => {
+            const y = PADDING_TOP + CHART_H - (val / yMax) * CHART_H;
+            const isBase = val === 0;
+            return (
+              <line
+                key={i}
+                x1={LABEL_W}
+                y1={y}
+                x2={svgWidth - PADDING_RIGHT}
+                y2={y}
+                stroke={isBase ? '#2B2F63' : '#1C2047'}
+                strokeWidth="1"
+                strokeDasharray={isBase ? 'none' : '3,5'}
+              />
+            );
+          })}
+
+          {/* Gradient fill */}
+          <polygon
+            points={fillStr}
+            fill={`url(#${gradId})`}
+            clipPath={`url(#clip-${gradId})`}
+          />
+
+          {/* Line */}
+          <polyline
+            points={lineStr}
+            fill="none"
+            stroke={color}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+
+          {/* Data points + hover */}
+          {data.map((point, idx) => {
+            const { x, y } = getXY(idx, point.value);
+            const hovered = hoveredIdx === idx;
+
+            const ttX = Math.max(LABEL_W + 4, Math.min(x - 44, svgWidth - 96));
+            const ttY = y > 70 ? y - 58 : y + 14;
+
+            return (
+              <g key={idx}>
+                {/* Glow ring */}
+                {hovered && (
+                  <circle cx={x} cy={y} r="16" fill={color} opacity="0.12" style={{ pointerEvents: 'none' }} />
+                )}
+
+                {/* Visible dot */}
+                <circle
+                  cx={x}
+                  cy={y}
+                  r={hovered ? 6 : 3.5}
+                  fill={hovered ? color : '#0E1026'}
+                  stroke={color}
+                  strokeWidth="2"
+                  style={{ pointerEvents: 'none', transition: 'r 0.12s' }}
                 />
-              );
-            })}
 
-            {/* Polyline */}
-            <polyline
-              points={pointsString}
-              fill="none"
-              stroke={color}
-              strokeWidth="3.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            />
+                {/* Invisible hitbox */}
+                <circle
+                  cx={x}
+                  cy={y}
+                  r="18"
+                  fill="transparent"
+                  style={{ cursor: 'crosshair', pointerEvents: 'auto' }}
+                  onMouseEnter={() => setHoveredIdx(idx)}
+                  onMouseLeave={() => setHoveredIdx(null)}
+                />
 
-            {/* Data Points com Hover */}
-            {chartData.map((point, idx) => {
-              const { x, y } = getPoint(idx, point.value);
-              
-              return (
-                <g key={`point-${idx}`}>
-                  {/* Invisible hitbox */}
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r="14"
-                    fill="transparent"
-                    style={{ cursor: 'pointer', pointerEvents: 'auto' }}
-                    onMouseEnter={() => setHoveredIndex(idx)}
-                    onMouseLeave={() => setHoveredIndex(null)}
-                  />
-                  
-                  {/* Visible point */}
-                  <circle
-                    cx={x}
-                    cy={y}
-                    r="6"
-                    fill={color}
-                    stroke="#0B0B1A"
-                    strokeWidth="2.5"
-                    style={{
-                      filter: hoveredIndex === idx ? 'drop-shadow(0 0 10px rgba(229, 226, 255, 0.9))' : 'none',
-                      transition: 'filter 0.15s',
-                      pointerEvents: 'none',
-                    }}
-                  />
-
-                  {/* Tooltip */}
-                  {hoveredIndex === idx && (
-                    <g>
-                      <rect
-                        x={Math.max(5, Math.min(x - 50, SVG_WIDTH - 105))}
-                        y={y > 80 ? y - 65 : y + 15}
-                        width="100"
-                        height="55"
-                        fill="#0E1026"
-                        stroke={color}
-                        strokeWidth="2"
-                        rx="6"
-                        style={{ pointerEvents: 'none' }}
-                      />
-                      <text
-                        x={Math.max(5, Math.min(x - 50, SVG_WIDTH - 105)) + 50}
-                        y={y > 80 ? y - 40 : y + 32}
-                        textAnchor="middle"
-                        fill="#E5E2FF"
-                        fontSize="11"
-                        fontWeight="600"
-                        style={{ pointerEvents: 'none' }}
-                      >
-                        {point.label}
-                      </text>
-                      <text
-                        x={Math.max(5, Math.min(x - 50, SVG_WIDTH - 105)) + 50}
-                        y={y > 80 ? y - 22 : y + 50}
-                        textAnchor="middle"
-                        fill={color}
-                        fontSize="13"
-                        fontWeight="700"
-                        style={{ pointerEvents: 'none' }}
-                      >
-                        {formatNumber(point.value)}
-                      </text>
-                    </g>
-                  )}
-                </g>
-              );
-            })}
-          </svg>
-        </View>
+                {/* Tooltip */}
+                {hovered && (
+                  <g style={{ pointerEvents: 'none' }}>
+                    {/* Vertical guide line */}
+                    <line
+                      x1={x} y1={PADDING_TOP}
+                      x2={x} y2={PADDING_TOP + CHART_H}
+                      stroke={color}
+                      strokeWidth="1"
+                      opacity="0.35"
+                      strokeDasharray="3,3"
+                    />
+                    <rect
+                      x={ttX} y={ttY}
+                      width={88} height={46}
+                      rx={8}
+                      fill="#0D0F24"
+                      stroke={color}
+                      strokeWidth="1.5"
+                      opacity="0.97"
+                    />
+                    <text
+                      x={ttX + 44} y={ttY + 17}
+                      textAnchor="middle"
+                      fill="#8B8FB3"
+                      fontSize="10"
+                      fontWeight="500"
+                    >
+                      {point.label}
+                    </text>
+                    <text
+                      x={ttX + 44} y={ttY + 34}
+                      textAnchor="middle"
+                      fill={color}
+                      fontSize="13"
+                      fontWeight="700"
+                    >
+                      {formatNumber(point.value)}
+                    </text>
+                  </g>
+                )}
+              </g>
+            );
+          })}
+        </svg>
       </View>
 
-      {/* X-Axis Labels */}
-      <View style={[styles.xAxisLabels, { width: SVG_WIDTH }]}>
-        {chartData.map((point, idx) => (
-          <View key={idx} style={styles.xLabelCol}>
-            <Text style={styles.xLabel}>{point.label}</Text>
-          </View>
+      {/* X-axis labels */}
+      <View style={[styles.xAxis, { paddingLeft: LABEL_W, paddingRight: PADDING_RIGHT }]}>
+        {data.map((p, i) => (
+          <Text key={i} style={styles.xLabel}>{p.label}</Text>
         ))}
       </View>
     </View>
@@ -256,83 +267,44 @@ export default function LineChart({ title, points, color }: Props) {
 
 const styles = StyleSheet.create({
   container: {
-    backgroundColor: '#141732',
-    borderRadius: 18,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#2B2F63',
+    backgroundColor: '#111328',
+    borderRadius: 16,
+    paddingTop: 18,
+    paddingBottom: 12,
+    overflow: 'hidden',
   },
   title: {
-    color: '#E5E2FF',
-    fontSize: 18,
-    fontWeight: '800',
-    marginBottom: 18,
+    color: '#C8C5F0',
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
-    letterSpacing: 1.5,
+    paddingHorizontal: 18,
+    marginBottom: 12,
   },
-  chartWrapper: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 8,
-  },
-  yAxisLabels: {
-    justifyContent: 'space-between',
-    paddingVertical: 0,
-  },
-  yLabelRow: {
-    height: 30,
-    justifyContent: 'center',
-    alignItems: 'flex-end',
-    paddingRight: 8,
-  },
-  yLabel: {
-    color: '#B4B8E6',
-    fontSize: 11,
-    fontWeight: '600',
-    fontFamily: 'monospace',
-    textAlign: 'right',
-  },
-  svgWrapper: {
-    position: 'relative',
-    backgroundColor: '#0E1026',
-    borderRadius: 12,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: '#2B2F63',
-  },
-  svg: {
+  svgWrap: {
     width: '100%',
-    height: '100%',
   },
-  xAxisLabels: {
+  xAxis: {
     flexDirection: 'row',
-    height: 28,
-  },
-  xLabelCol: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 2,
+    marginTop: 6,
   },
   xLabel: {
-    color: '#B4B8E6',
-    fontSize: 13,
-    fontWeight: '600',
+    flex: 1,
     textAlign: 'center',
+    color: '#555882',
+    fontSize: 10,
+    fontWeight: '600',
     fontFamily: 'monospace',
   },
-  emptyState: {
-    height: 200,
-    justifyContent: 'center',
+  empty: {
+    height: SVG_H,
     alignItems: 'center',
-    backgroundColor: '#0E1026',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#2B2F63',
+    justifyContent: 'center',
   },
-  emptyStateText: {
-    color: '#8C8FB3',
-    fontSize: 14,
+  emptyText: {
+    color: '#555882',
+    fontSize: 13,
     fontStyle: 'italic',
   },
 });

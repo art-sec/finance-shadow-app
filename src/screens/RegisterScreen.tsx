@@ -1,229 +1,152 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
-import { SimpleButton, SimpleInput } from '../components';
+import { C } from '../theme';
 
-type Props = {
-  onBackToLogin: () => void;
+type Props = { onBackToLogin: () => void };
+
+const ERROR_MAP: Record<string, string> = {
+  'auth/email-already-in-use': 'Email já está em uso.',
+  'auth/invalid-email':        'Email inválido.',
+  'auth/weak-password':        'Senha fraca. Use ao menos 6 caracteres.',
+  'auth/network-request-failed': 'Sem conexão. Verifique sua internet.',
 };
 
 export default function RegisterScreen({ onBackToLogin }: Props) {
   const [username, setUsername] = useState('');
-  const [email, setEmail] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-
-  const getRegisterErrorMessage = (err: unknown) => {
-    const code =
-      typeof err === 'object' && err ? (err as { code?: string }).code : undefined;
-
-    switch (code) {
-      case 'auth/email-already-in-use':
-        return 'Email já está em uso.';
-      case 'auth/invalid-email':
-        return 'Email inválido.';
-      case 'auth/weak-password':
-        return 'Senha fraca. Use ao menos 6 caracteres.';
-      case 'auth/operation-not-allowed':
-        return 'Habilite login por email/senha no Firebase.';
-      case 'auth/network-request-failed':
-        return 'Sem conexão. Verifique sua internet.';
-      case 'auth/invalid-api-key':
-      case 'auth/app-not-authorized':
-      case 'auth/invalid-credential':
-        return 'Firebase não configurado. Revise as credenciais.';
-      case 'permission-denied':
-        return 'Firestore sem permissão. Ajuste as regras de users/{uid}.';
-      case 'unavailable':
-        return 'Firestore indisponível no momento. Tente novamente.';
-      default:
-        return code
-          ? `Falha no cadastro. Código: ${code}`
-          : 'Falha no cadastro. Verifique os dados e tente novamente.';
-    }
-  };
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
 
   const handleRegister = async () => {
-    if (!email.trim() || !password.trim() || !username.trim()) {
-      setError('Preencha usuário, email e senha.');
-      return;
+    if (!username.trim() || !email.trim() || !password) {
+      setError('Preencha todos os campos.'); return;
     }
-
-    setError('');
-    setLoading(true);
-
+    setError(''); setLoading(true);
     try {
-      const credential = await createUserWithEmailAndPassword(
-        auth,
-        email.trim(),
-        password
-      );
-
-      await updateProfile(credential.user, {
-        displayName: username.trim(),
-      });
-
-      await setDoc(doc(db, 'users', credential.user.uid), {
-        uid: credential.user.uid,
+      const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
+      await updateProfile(cred.user, { displayName: username.trim() });
+      await setDoc(doc(db, 'users', cred.user.uid), {
+        uid: cred.user.uid,
         username: username.trim(),
         email: email.trim(),
         createdAt: serverTimestamp(),
       });
-    } catch (err) {
-      setError(getRegisterErrorMessage(err));
+    } catch (err: any) {
+      setError(ERROR_MAP[err?.code] ?? `Falha no cadastro. (${err?.code ?? 'erro desconhecido'})`);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.screen}>
-      <KeyboardAvoidingView
-        style={styles.keyboardWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
+    <View style={styles.root}>
+      <View style={styles.glowTL} pointerEvents="none" />
+
+      <KeyboardAvoidingView style={styles.kav} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
           <View style={styles.card}>
-            {/* Título */}
-            <Text style={styles.title}>👤 Criar Conta</Text>
-            <Text style={styles.subtitle}>Cadastre-se no sistema</Text>
+            <View style={styles.cardAccent} />
 
-            {/* Formulário */}
+            <View style={styles.header}>
+              <View style={styles.logoMark}>
+                <Text style={styles.logoText}>SF</Text>
+              </View>
+              <View>
+                <Text style={styles.cardTitle}>Criar conta</Text>
+                <Text style={styles.cardSub}>Junte-se ao Shadow Finances</Text>
+              </View>
+            </View>
+
             <View style={styles.form}>
-              <SimpleInput
-                label="Usuário"
-                placeholder="Seu nome"
-                value={username}
-                onChangeText={setUsername}
-                editable={!loading}
-              />
+              <Field label="Nome / Empresa" value={username} onChange={setUsername} placeholder="Seu nome" editable={!loading} />
+              <Field label="Email" value={email} onChange={setEmail} placeholder="seu@email.com" keyboard="email-address" editable={!loading} />
+              <Field label="Senha" value={password} onChange={setPassword} placeholder="Mínimo 6 caracteres" secure editable={!loading} />
 
-              <SimpleInput
-                label="Email"
-                placeholder="seu@email.com"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-                editable={!loading}
-              />
-
-              <SimpleInput
-                label="Senha"
-                placeholder="••••••••"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                editable={!loading}
-              />
-
-              {error && <Text style={styles.error}>{error}</Text>}
-
-              <SimpleButton
-                label={loading ? "Cadastrando..." : "✓ Cadastrar"}
-                onPress={handleRegister}
-                disabled={loading}
-                loading={loading}
-                size="large"
-              />
+              {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
               <Pressable
-                style={({ pressed }) => [styles.loginLink, pressed && styles.loginLinkPressed]}
-                onPress={onBackToLogin}
+                style={({ pressed }) => [styles.btn, loading && styles.btnDisabled, pressed && styles.btnPressed]}
+                onPress={handleRegister}
                 disabled={loading}
               >
-                <Text style={styles.loginLinkText}>
-                  Já tem conta? <Text style={styles.loginLinkBold}>Fazer login</Text>
+                <Text style={styles.btnText}>{loading ? 'Criando conta…' : 'Criar conta'}</Text>
+              </Pressable>
+
+              <Pressable style={({ pressed }) => [styles.link, pressed && { opacity: 0.7 }]} onPress={onBackToLogin}>
+                <Text style={styles.linkText}>
+                  Já tem conta?{'  '}
+                  <Text style={styles.linkBold}>Fazer login</Text>
                 </Text>
               </Pressable>
             </View>
           </View>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
+function Field({ label, value, onChange, placeholder, keyboard, secure, editable = true }: any) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={fieldS.wrap}>
+      <Text style={fieldS.label}>{label}</Text>
+      <TextInput
+        style={[fieldS.input, focused && fieldS.focused]}
+        value={value} onChangeText={onChange}
+        placeholder={placeholder} placeholderTextColor={C.text3}
+        keyboardType={keyboard || 'default'}
+        secureTextEntry={!!secure}
+        editable={editable}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      />
+    </View>
+  );
+}
+
+const fieldS = StyleSheet.create({
+  wrap:    { gap: 6 },
+  label:   { fontSize: 13, fontWeight: '600', color: C.text2, letterSpacing: 0.3 },
+  input:   { height: 48, borderRadius: 12, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgInput, paddingHorizontal: 16, fontSize: 15, color: C.text1 },
+  focused: { borderColor: C.primary, /* @ts-ignore */ boxShadow: '0 0 0 3px rgba(124,92,255,0.15)' },
+});
+
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#0B0B1A',
-  },
-  keyboardWrap: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 20,
-  },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: '#141732',
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#2B2F63',
-  },
-  title: {
-    fontSize: 32,
-    color: '#F4F2FF',
-    fontWeight: '800',
-    marginBottom: 4,
-  },
-  subtitle: {
-    color: '#A9ACD9',
-    marginBottom: 24,
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  form: {
-    gap: 16,
-  },
-  error: {
-    backgroundColor: '#3D1A2D',
-    color: '#FF9BC2',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: '#FF9BC2',
-  },
-  loginLink: {
-    marginTop: 12,
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  loginLinkPressed: {
-    opacity: 0.7,
-  },
-  loginLinkText: {
-    color: '#A9ACD9',
-    fontSize: 14,
-  },
-  loginLinkBold: {
-    color: '#7C5CFF',
-    fontWeight: '700',
-  },
+  root: { flex: 1, backgroundColor: C.bgBase },
+  glowTL: { position: 'absolute', top: -160, left: -160, width: 480, height: 480, borderRadius: 240, backgroundColor: 'rgba(124,92,255,0.07)', /* @ts-ignore */ filter: 'blur(80px)' },
+  kav:    { flex: 1 },
+  scroll: { flexGrow: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 20, paddingVertical: 40 },
+  card:   { width: '100%', maxWidth: 440, backgroundColor: C.bgCard, borderRadius: 20, borderWidth: 1, borderColor: C.border, overflow: 'hidden', /* @ts-ignore */ boxShadow: '0 24px 64px rgba(0,0,0,0.40)' },
+  cardAccent: { height: 3, /* @ts-ignore */ background: 'linear-gradient(90deg, #7C5CFF 0%, #4EC5FF 100%)', backgroundColor: C.primary },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 14, paddingHorizontal: 28, paddingTop: 28, paddingBottom: 8 },
+  logoMark: { width: 44, height: 44, borderRadius: 13, alignItems: 'center', justifyContent: 'center', /* @ts-ignore */ background: 'linear-gradient(135deg, #7C5CFF 0%, #4A2FC9 100%)', backgroundColor: C.primary },
+  logoText: { fontSize: 16, fontWeight: '800', color: '#fff' },
+  cardTitle: { fontSize: 20, fontWeight: '800', color: C.text1, letterSpacing: -0.3 },
+  cardSub:   { fontSize: 13, color: C.text2 },
+  form: { paddingHorizontal: 28, paddingBottom: 28, paddingTop: 16, gap: 16 },
+  errorBox: { backgroundColor: C.redBg, borderWidth: 1, borderColor: C.red, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
+  errorText: { color: C.red, fontSize: 13, fontWeight: '500' },
+  btn: { height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', /* @ts-ignore */ background: 'linear-gradient(135deg, #7C5CFF 0%, #4A2FC9 100%)', backgroundColor: C.primary },
+  btnDisabled: { opacity: 0.55 },
+  btnPressed:  { opacity: 0.85 },
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  link: { alignItems: 'center', paddingVertical: 4 },
+  linkText: { fontSize: 14, color: C.text2 },
+  linkBold: { color: C.primary, fontWeight: '700' },
 });

@@ -1,168 +1,256 @@
 import React, { useState } from 'react';
 import {
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../firebase/config';
-import { SimpleButton, SimpleInput } from '../components';
+import { C } from '../theme';
 
-type Props = {
-  onRegister: () => void;
-};
+type Props = { onRegister: () => void };
 
 export default function LoginScreen({ onRegister }: Props) {
-  const [email, setEmail] = useState('');
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
+
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
 
   const handleLogin = async () => {
-    setError('');
-    setLoading(true);
+    if (!email.trim() || !password) { setError('Preencha email e senha.'); return; }
+    setError(''); setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-    } catch (err) {
-      setError('Falha no login. Verifique email e senha.');
+    } catch {
+      setError('Email ou senha incorretos.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <View style={styles.screen}>
-      <KeyboardAvoidingView
-        style={styles.keyboardWrap}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.card}>
-            {/* Logo/Título */}
-            <Text style={styles.title}>💰 Shadow Finance</Text>
-            <Text style={styles.subtitle}>Painel de Finanças</Text>
+    <View style={styles.root}>
+      {/* Ambient glow */}
+      <View style={styles.glowTL} pointerEvents="none" />
+      <View style={styles.glowBR} pointerEvents="none" />
 
-            {/* Formulário */}
+      <KeyboardAvoidingView style={styles.kav} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <ScrollView contentContainerStyle={[styles.scroll, isWide && styles.scrollWide]} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+
+          {/* ── Brand panel ── */}
+          <View style={[styles.brandPanel, isWide && styles.brandPanelWide]}>
+            <View style={styles.logoMark}>
+              <Text style={styles.logoText}>SF</Text>
+            </View>
+            <Text style={styles.brandName}>Shadow Finances</Text>
+            <Text style={styles.brandTagline}>
+              Inteligência financeira{'\n'}para o seu negócio.
+            </Text>
+
+            {isWide && (
+              <View style={styles.brandStats}>
+                {[
+                  { label: 'Métricas em tempo real', icon: '⚡' },
+                  { label: 'Análise de ROAS e lucro', icon: '📊' },
+                  { label: 'Sincronização em nuvem', icon: '☁️' },
+                ].map((item, i) => (
+                  <View key={i} style={styles.brandStat}>
+                    <Text style={styles.brandStatIcon}>{item.icon}</Text>
+                    <Text style={styles.brandStatLabel}>{item.label}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* ── Form card ── */}
+          <View style={[styles.card, isWide && styles.cardWide]}>
+            {/* Gradient top accent */}
+            <View style={styles.cardAccent} />
+
+            <Text style={styles.cardTitle}>Bem-vindo de volta</Text>
+            <Text style={styles.cardSub}>Entre na sua conta para continuar</Text>
+
             <View style={styles.form}>
-              <SimpleInput
-                label="Email"
-                placeholder="seu@email.com"
-                keyboardType="email-address"
-                value={email}
-                onChangeText={setEmail}
-                editable={!loading}
-              />
+              <Field label="Email" value={email} onChange={setEmail}
+                placeholder="seu@email.com" keyboard="email-address" editable={!loading} />
+              <Field label="Senha" value={password} onChange={setPassword}
+                placeholder="••••••••" secure editable={!loading} />
 
-              <SimpleInput
-                label="Senha"
-                placeholder="••••••••"
-                value={password}
-                onChangeText={setPassword}
-                secureTextEntry
-                editable={!loading}
-              />
-
-              {error && <Text style={styles.error}>{error}</Text>}
-
-              <SimpleButton
-                label={loading ? "Entrando..." : "🔓 Entrar"}
-                onPress={handleLogin}
-                disabled={loading}
-                loading={loading}
-                size="large"
-              />
+              {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
               <Pressable
-                style={({ pressed }) => [ styles.registerLink, pressed && styles.registerLinkPressed ]}
-                onPress={onRegister}
+                style={({ pressed }) => [styles.btn, loading && styles.btnDisabled, pressed && styles.btnPressed]}
+                onPress={handleLogin}
                 disabled={loading}
               >
-                <Text style={styles.registerLinkText}>
-                  Não tem conta? <Text style={styles.registerLinkBold}>Criar agora</Text>
-                </Text>
+                <Text style={styles.btnText}>{loading ? 'Entrando…' : 'Entrar'}</Text>
+              </Pressable>
+
+              <View style={styles.divider}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>ou</Text>
+                <View style={styles.dividerLine} />
+              </View>
+
+              <Pressable style={({ pressed }) => [styles.outlineBtn, pressed && styles.outlineBtnPressed]} onPress={onRegister}>
+                <Text style={styles.outlineBtnText}>Criar uma conta gratuita</Text>
               </Pressable>
             </View>
           </View>
+
         </ScrollView>
       </KeyboardAvoidingView>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: '#0B0B1A',
-  },
-  keyboardWrap: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
+function Field({ label, value, onChange, placeholder, keyboard, secure, editable = true }: any) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <View style={fieldStyles.wrap}>
+      <Text style={fieldStyles.label}>{label}</Text>
+      <TextInput
+        style={[fieldStyles.input, focused && fieldStyles.inputFocused]}
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={C.text3}
+        keyboardType={keyboard || 'default'}
+        secureTextEntry={!!secure}
+        editable={editable}
+        onFocus={() => setFocused(true)}
+        onBlur={() => setFocused(false)}
+      />
+    </View>
+  );
+}
+
+const fieldStyles = StyleSheet.create({
+  wrap:  { gap: 6 },
+  label: { fontSize: 13, fontWeight: '600', color: C.text2, letterSpacing: 0.3 },
+  input: {
+    height: 48,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.border,
+    backgroundColor: C.bgInput,
     paddingHorizontal: 16,
-    paddingVertical: 20,
+    fontSize: 15,
+    color: C.text1,
   },
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    backgroundColor: '#141732',
-    borderRadius: 16,
-    padding: 24,
-    borderWidth: 1,
-    borderColor: '#2B2F63',
+  inputFocused: {
+    borderColor: C.primary,
+    // @ts-ignore
+    boxShadow: `0 0 0 3px rgba(124,92,255,0.15)`,
   },
-  title: {
-    fontSize: 32,
-    color: '#F4F2FF',
-    fontWeight: '800',
-    marginBottom: 4,
+});
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: C.bgBase },
+  glowTL: {
+    position: 'absolute', top: -160, left: -160,
+    width: 480, height: 480, borderRadius: 240,
+    backgroundColor: 'rgba(124,92,255,0.07)',
+    // @ts-ignore
+    filter: 'blur(80px)',
   },
-  subtitle: {
-    color: '#A9ACD9',
-    marginBottom: 24,
-    fontSize: 14,
-    fontWeight: '500',
+  glowBR: {
+    position: 'absolute', bottom: -120, right: -120,
+    width: 360, height: 360, borderRadius: 180,
+    backgroundColor: 'rgba(78,197,255,0.05)',
+    // @ts-ignore
+    filter: 'blur(70px)',
   },
-  form: {
-    gap: 16,
-  },
-  error: {
-    backgroundColor: '#3D1A2D',
-    color: '#FF9BC2',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 8,
-    fontSize: 14,
-    fontWeight: '600',
-    textAlign: 'center',
-    borderWidth: 1,
-    borderColor: '#FF9BC2',
-  },
-  registerLink: {
-    marginTop: 12,
+  kav: { flex: 1 },
+  scroll: {
+    flexGrow: 1,
     alignItems: 'center',
-    paddingVertical: 8,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
+    gap: 32,
   },
-  registerLinkPressed: {
-    opacity: 0.7,
+  scrollWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 64 },
+
+  // Brand
+  brandPanel: { alignItems: 'center', maxWidth: 340 },
+  brandPanelWide: { alignItems: 'flex-start', flex: 1 },
+  logoMark: {
+    width: 64, height: 64, borderRadius: 20,
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 16,
+    // @ts-ignore
+    background: 'linear-gradient(135deg, #7C5CFF 0%, #4A2FC9 100%)',
+    backgroundColor: C.primary,
   },
-  registerLinkText: {
-    color: '#A9ACD9',
-    fontSize: 14,
+  logoText: { fontSize: 24, fontWeight: '800', color: '#fff', letterSpacing: -0.5 },
+  brandName: { fontSize: 28, fontWeight: '800', color: C.text1, letterSpacing: -0.5, marginBottom: 8 },
+  brandTagline: { fontSize: 16, color: C.text2, lineHeight: 24, marginBottom: 32 },
+  brandStats: { gap: 16 },
+  brandStat: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  brandStatIcon: { fontSize: 18 },
+  brandStatLabel: { fontSize: 14, color: C.text2, fontWeight: '500' },
+
+  // Card
+  card: {
+    width: '100%', maxWidth: 420,
+    backgroundColor: C.bgCard,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: C.border,
+    overflow: 'hidden',
+    // @ts-ignore
+    boxShadow: '0 24px 64px rgba(0,0,0,0.40)',
   },
-  registerLinkBold: {
-    color: '#7C5CFF',
-    fontWeight: '700',
+  cardWide: { flex: 1, maxWidth: 460 },
+  cardAccent: {
+    height: 3,
+    // @ts-ignore
+    background: 'linear-gradient(90deg, #7C5CFF 0%, #4EC5FF 100%)',
+    backgroundColor: C.primary,
   },
+  cardTitle: { fontSize: 22, fontWeight: '800', color: C.text1, paddingHorizontal: 28, paddingTop: 28, marginBottom: 4, letterSpacing: -0.3 },
+  cardSub:   { fontSize: 14, color: C.text2, paddingHorizontal: 28, marginBottom: 24 },
+
+  form: { paddingHorizontal: 28, paddingBottom: 28, gap: 16 },
+
+  errorBox: {
+    backgroundColor: C.redBg,
+    borderWidth: 1, borderColor: C.red,
+    borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10,
+  },
+  errorText: { color: C.red, fontSize: 13, fontWeight: '500' },
+
+  btn: {
+    height: 50, borderRadius: 12,
+    alignItems: 'center', justifyContent: 'center',
+    // @ts-ignore
+    background: 'linear-gradient(135deg, #7C5CFF 0%, #4A2FC9 100%)',
+    backgroundColor: C.primary,
+  },
+  btnDisabled: { opacity: 0.55 },
+  btnPressed:  { opacity: 0.85 },
+  btnText: { color: '#fff', fontSize: 16, fontWeight: '700', letterSpacing: 0.2 },
+
+  divider: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: C.border },
+  dividerText: { fontSize: 12, color: C.text3, fontWeight: '500' },
+
+  outlineBtn: {
+    height: 48, borderRadius: 12,
+    borderWidth: 1, borderColor: C.borderLt,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  outlineBtnPressed: { backgroundColor: C.bgElevated },
+  outlineBtnText: { color: C.text2, fontSize: 15, fontWeight: '600' },
 });
