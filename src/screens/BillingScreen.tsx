@@ -46,8 +46,11 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
   const [expenses,      setExpenses]      = useState<DailyExpense[]>([]);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [loading,       setLoading]       = useState(false);
-  const [saveMsg,       setSaveMsg]       = useState('');
-  const [saveMsgType,   setSaveMsgType]   = useState<'ok'|'err'>('ok');
+  const [dailyMsg,      setDailyMsg]      = useState('');
+  const [dailyMsgType,  setDailyMsgType]  = useState<'ok'|'err'>('ok');
+  const [subMsg,        setSubMsg]        = useState('');
+  const [subMsgType,    setSubMsgType]    = useState<'ok'|'err'>('ok');
+  const [loadErr,       setLoadErr]       = useState('');
   const [reload,        setReload]        = useState(0);
 
   // Daily form
@@ -70,7 +73,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     let mounted = true;
     const load = async () => {
       setLoading(true);
-      setSaveMsg('');
+      setLoadErr('');
       try {
         const [dailySnap, subSnap] = await Promise.all([
           getDocs(collection(db, 'users', userId, 'billing', selectedMonth, 'daily')),
@@ -91,7 +94,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
           setSubscriptions(legacySnap.docs.map(d => ({ id: d.id, ...d.data(), storagePath: 'legacy' } as Subscription)));
         }
       } catch (err: any) {
-        if (err?.code === 'permission-denied') setSaveMsg('Sem permissão para ler dados de billing.');
+        if (err?.code === 'permission-denied') setLoadErr('Sem permissão para ler dados de billing.');
       } finally {
         if (mounted) setLoading(false);
       }
@@ -117,15 +120,20 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     };
   }, [expenses, subscriptions]);
 
-  const flash = (msg: string, type: 'ok'|'err') => {
-    setSaveMsgType(type); setSaveMsg(msg);
-    setTimeout(() => setSaveMsg(''), 3000);
+  const flashDaily = (msg: string, type: 'ok'|'err') => {
+    setDailyMsgType(type); setDailyMsg(msg);
+    setTimeout(() => setDailyMsg(''), 3000);
+  };
+
+  const flashSub = (msg: string, type: 'ok'|'err') => {
+    setSubMsgType(type); setSubMsg(msg);
+    setTimeout(() => setSubMsg(''), 3000);
   };
 
   const handleAddDaily = async () => {
     if (!userId) return;
     const dayNum = parseInt(day);
-    if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) { flash('Dia inválido (01-31).', 'err'); return; }
+    if (isNaN(dayNum) || dayNum < 1 || dayNum > 31) { flashDaily('Dia inválido (01-31).', 'err'); return; }
     const exp: DailyExpense = {
       date:           String(dayNum).padStart(2, '0'),
       receivedAmount: Number(received) || 0,
@@ -138,9 +146,9 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     try {
       await setDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'daily', exp.date), { ...exp, updatedAt: serverTimestamp() }, { merge: true });
       setDay('01'); setReceived(''); setEmpCost(''); setAdsCost(''); setAdsRet(''); setNotes('');
-      flash('Gasto registrado.', 'ok');
+      flashDaily('Gasto registrado.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
-    } catch (err: any) { flash(err.message, 'err'); }
+    } catch (err: any) { flashDaily(err.message, 'err'); }
     finally { setSaving(false); }
   };
 
@@ -148,15 +156,15 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
     if (!userId) return;
     try {
       await deleteDoc(doc(db, 'users', userId, 'billing', selectedMonth, 'daily', date));
-      flash('Gasto removido.', 'ok');
+      flashDaily('Gasto removido.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
-    } catch (err: any) { flash(err.message, 'err'); }
+    } catch (err: any) { flashDaily(err.message, 'err'); }
   };
 
   const handleAddSub = async () => {
     if (!userId) return;
-    if (!subName.trim()) { flash('Nome da assinatura é obrigatório.', 'err'); return; }
-    if (!Number(subCost) || Number(subCost) <= 0) { flash('Custo deve ser maior que zero.', 'err'); return; }
+    if (!subName.trim()) { flashSub('Nome da assinatura é obrigatório.', 'err'); return; }
+    if (!Number(subCost) || Number(subCost) <= 0) { flashSub('Custo deve ser maior que zero.', 'err'); return; }
     setSavingSub(true);
     try {
       const id = String(Date.now());
@@ -164,9 +172,9 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
         name: subName.trim(), cost: Number(subCost), category: subCat, createdAt: serverTimestamp(),
       });
       setSubName(''); setSubCost(''); setSubCat('software');
-      flash('Assinatura adicionada.', 'ok');
+      flashSub('Assinatura adicionada.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
-    } catch (err: any) { flash(err.message, 'err'); }
+    } catch (err: any) { flashSub(err.message, 'err'); }
     finally { setSavingSub(false); }
   };
 
@@ -178,9 +186,9 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
       : doc(db, 'users', userId, 'billing', selectedMonth, 'subscriptions', subId);
     try {
       await deleteDoc(path);
-      flash('Assinatura removida.', 'ok');
+      flashSub('Assinatura removida.', 'ok');
       setTimeout(() => setReload(r => r + 1), 800);
-    } catch (err: any) { flash(err.message, 'err'); }
+    } catch (err: any) { flashSub(err.message, 'err'); }
   };
 
   const metrics = [
@@ -207,12 +215,10 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
         </View>
       )}
 
-      {/* Flash message */}
-      {saveMsg ? (
-        <View style={[styles.flash, saveMsgType === 'ok' ? styles.flashOk : styles.flashErr]}>
-          <Text style={[styles.flashText, { color: saveMsgType === 'ok' ? C.green : C.red }]}>
-            {saveMsgType === 'ok' ? '✓ ' : '✕ '}{saveMsg}
-          </Text>
+      {/* Load error */}
+      {loadErr ? (
+        <View style={[styles.flash, styles.flashErr]}>
+          <Text style={[styles.flashText, { color: C.red }]}>✕ {loadErr}</Text>
         </View>
       ) : null}
 
@@ -250,6 +256,13 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
           <BField label="Retorno dos Anúncios"    value={adsRet}   onChange={setAdsRet}   placeholder="0"  numeric prefix="R$" />
           <BField label="Observações (opcional)"  value={notes}    onChange={setNotes}    placeholder="Ex: promoção"  />
         </View>
+        {dailyMsg ? (
+          <View style={[styles.flash, dailyMsgType === 'ok' ? styles.flashOk : styles.flashErr, styles.flashInline]}>
+            <Text style={[styles.flashText, { color: dailyMsgType === 'ok' ? C.green : C.red }]}>
+              {dailyMsgType === 'ok' ? '✓ ' : '✕ '}{dailyMsg}
+            </Text>
+          </View>
+        ) : null}
         <Pressable style={({ pressed }) => [styles.btn, saving && styles.btnDisabled, pressed && { opacity: 0.85 }]} onPress={handleAddDaily} disabled={saving}>
           {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnText}>+ Registrar dia</Text>}
         </Pressable>
@@ -285,6 +298,13 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
           <BField label="Custo Mensal" value={subCost} onChange={setSubCost} placeholder="0" numeric prefix="R$" />
           <BField label="Categoria" value={subCat} onChange={setSubCat} placeholder="software" />
         </View>
+        {subMsg ? (
+          <View style={[styles.flash, subMsgType === 'ok' ? styles.flashOk : styles.flashErr, styles.flashInline]}>
+            <Text style={[styles.flashText, { color: subMsgType === 'ok' ? C.green : C.red }]}>
+              {subMsgType === 'ok' ? '✓ ' : '✕ '}{subMsg}
+            </Text>
+          </View>
+        ) : null}
         <Pressable style={({ pressed }) => [styles.btn, savingSub && styles.btnDisabled, pressed && { opacity: 0.85 }]} onPress={handleAddSub} disabled={savingSub}>
           {savingSub ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.btnText}>+ Adicionar assinatura</Text>}
         </Pressable>
@@ -354,7 +374,8 @@ const styles = StyleSheet.create({
   loadingBar:  { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: C.bgCard, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 16, paddingVertical: 10 },
   loadingText: { fontSize: 13, color: C.text2 },
 
-  flash:    { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1 },
+  flash:       { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1 },
+  flashInline: { marginBottom: 12 },
   flashOk:  { backgroundColor: C.greenBg, borderColor: C.green },
   flashErr: { backgroundColor: C.redBg,   borderColor: C.red   },
   flashText: { fontSize: 13, fontWeight: '600' },
