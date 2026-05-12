@@ -140,7 +140,7 @@ export default function BillingScreen({ selectedMonth = 'Jan', userId }: Props) 
       employeeCost:   Number(empCost)  || 0,
       adsCost:        Number(adsCost)  || 0,
       adsReturn:      Number(adsRet)   || 0,
-      notes:          notes || undefined,
+      ...(notes.trim() ? { notes: notes.trim() } : {}),
     };
     setSaving(true);
     try {
