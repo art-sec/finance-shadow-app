@@ -19,27 +19,47 @@ Remova todas as regras existentes e copie-cole o código abaixo:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // Permite acesso apenas a usuários autenticados
+
     match /users/{userId} {
-      // Usuário só pode acessar seus próprios dados
       allow read, write: if request.auth.uid == userId;
-      
-      // Sub-collections usadas pelo app
+
+      // Módulo 4 — Financeiro (existente)
       match /finance/{document=**} {
         allow read, write: if request.auth.uid == userId;
       }
-
       match /billing/{document=**} {
         allow read, write: if request.auth.uid == userId;
       }
-
-      // Estrutura legada (compatibilidade)
       match /subscriptions/{document=**} {
         allow read, write: if request.auth.uid == userId;
       }
+
+      // Módulo 1 — Model Account Manager
+      match /models/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // Módulo 2 — VA & Team Management
+      match /team/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // Módulo 3 — To-Do List
+      match /todos/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // Módulo 5 — Content HQ
+      match /content/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // Módulo 6 — iPhone Tracker
+      match /devices/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
     }
-    
+
     // Bloqueia tudo mais
     match /{document=**} {
       allow read, write: if false;
@@ -63,11 +83,14 @@ O aplicativo cria a seguinte estrutura no Firestore:
 ```
 users/
   {userId}/
-    finance/
-      Jan: { faturamento: 17769, anuncios: 0, funcionarios: 802, faturamentoTotal: 17769, updatedAt: ... }
-      Fev: { faturamento: ..., ... }
-      Mar: { ... }
-      ... (um documento por mês)
+    finance/         → Módulo 4: dados mensais agregados (Jan, Fev…)
+    billing/         → Módulo 4: gastos diários e assinaturas
+    subscriptions/   → legado (compatibilidade)
+    models/          → Módulo 1: contas das modelos
+    team/            → Módulo 2: membros da equipe e VAs
+    todos/           → Módulo 3: tarefas e lista de afazeres
+    content/         → Módulo 5: sprints e planos de conteúdo
+    devices/         → Módulo 6: iPhones e dispositivos
 ```
 
 ---

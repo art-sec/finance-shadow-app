@@ -63,11 +63,11 @@ export default function RegisterScreen({ onBackToLogin }: Props) {
 
             <View style={styles.header}>
               <View style={styles.logoMark}>
-                <Text style={styles.logoText}>SF</Text>
+                <Text style={styles.logoText}>SO</Text>
               </View>
               <View>
                 <Text style={styles.cardTitle}>Criar conta</Text>
-                <Text style={styles.cardSub}>Junte-se ao Shadow Finances</Text>
+                <Text style={styles.cardSub}>Junte-se ao Shadow OFM</Text>
               </View>
             </View>
 

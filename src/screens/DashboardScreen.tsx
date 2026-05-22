@@ -167,8 +167,8 @@ export default function DashboardScreen({ userEmail, userId }: Props) {
     <View style={styles.root}>
       <AppNav
         tabs={[
-          { id: 'dashboard', label: 'Dashboard',   icon: '📊' },
-          { id: 'billing',   label: 'Faturamento', icon: '💳' },
+          { id: 'dashboard', label: 'Visão Geral', icon: '📊' },
+          { id: 'billing',   label: 'Financeiro',  icon: '💰' },
         ]}
         activeTab={selectedTab}
         onTabChange={id => setSelectedTab(id as any)}

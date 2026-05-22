@@ -1,9 +1,9 @@
 {
   "expo": {
-    "name": "Shadow Finances",
-    "slug": "shadow-finances",
+    "name": "Shadow OFM",
+    "slug": "shadow-ofm",
     "version": "1.0.0",
-    "description": "Dashboard financeiro inteligente para análise de faturamento, controle de gastos e ROI",
+    "description": "Hub operacional para agências OFM — gestão de modelos, equipe, conteúdo e financeiro integrados.",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",

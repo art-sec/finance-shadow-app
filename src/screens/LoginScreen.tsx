@@ -49,19 +49,19 @@ export default function LoginScreen({ onRegister }: Props) {
           {/* ── Brand panel ── */}
           <View style={[styles.brandPanel, isWide && styles.brandPanelWide]}>
             <View style={styles.logoMark}>
-              <Text style={styles.logoText}>SF</Text>
+              <Text style={styles.logoText}>SO</Text>
             </View>
-            <Text style={styles.brandName}>Shadow Finances</Text>
+            <Text style={styles.brandName}>Shadow OFM</Text>
             <Text style={styles.brandTagline}>
-              Inteligência financeira{'\n'}para o seu negócio.
+              O hub operacional completo{'\n'}para sua agência OFM.
             </Text>
 
             {isWide && (
               <View style={styles.brandStats}>
                 {[
-                  { label: 'Métricas em tempo real', icon: '⚡' },
-                  { label: 'Análise de ROAS e lucro', icon: '📊' },
-                  { label: 'Sincronização em nuvem', icon: '☁️' },
+                  { label: 'Gestão de modelos e contas', icon: '👤' },
+                  { label: 'Controle de equipe e VAs', icon: '👥' },
+                  { label: 'Financeiro integrado em nuvem', icon: '☁️' },
                 ].map((item, i) => (
                   <View key={i} style={styles.brandStat}>
                     <Text style={styles.brandStatIcon}>{item.icon}</Text>

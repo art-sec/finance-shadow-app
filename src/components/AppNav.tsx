@@ -18,9 +18,9 @@ export default function AppNav({ tabs, activeTab, onTabChange, userEmail, onSign
       {/* Logo */}
       <View style={styles.logo}>
         <View style={styles.logoMark}>
-          <Text style={styles.logoText}>SF</Text>
+          <Text style={styles.logoText}>SO</Text>
         </View>
-        <Text style={styles.logoName}>Shadow Finances</Text>
+        <Text style={styles.logoName}>Shadow OFM</Text>
       </View>
 
       {/* Tabs */}
