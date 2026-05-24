@@ -6,21 +6,23 @@ import { C } from '../theme';
 import OverviewScreen  from '../screens/OverviewScreen';
 import BillingScreen   from '../screens/BillingScreen';
 import ModelsScreen    from '../screens/ModelsScreen';
+import AccountsScreen  from '../screens/AccountsScreen';
 import TeamScreen      from '../screens/TeamScreen';
 import TodoScreen      from '../screens/TodoScreen';
 import ContentScreen   from '../screens/ContentScreen';
 import DevicesScreen   from '../screens/DevicesScreen';
 
-type Tab = 'overview' | 'models' | 'team' | 'todos' | 'finance' | 'content' | 'devices';
+type Tab = 'overview' | 'models' | 'accounts' | 'team' | 'todos' | 'finance' | 'content' | 'devices';
 
 const NAV: { id: Tab; label: string; icon: string; desc: string }[] = [
   { id: 'overview',  label: 'Visão Geral',   icon: '📊', desc: 'KPIs e métricas' },
-  { id: 'models',    label: 'Modelos',        icon: '👤', desc: 'Contas das modelos' },
+  { id: 'models',    label: 'Modelos',        icon: '👤', desc: 'Perfis das modelos' },
+  { id: 'accounts',  label: 'Contas',         icon: '📱', desc: 'Redes sociais' },
   { id: 'team',      label: 'Equipe',         icon: '👥', desc: 'VAs e gestores' },
   { id: 'todos',     label: 'Tarefas',        icon: '✅', desc: 'Lista de afazeres' },
   { id: 'finance',   label: 'Financeiro',     icon: '💰', desc: 'Gastos e receitas' },
   { id: 'content',   label: 'Conteúdo',       icon: '🎬', desc: 'Sprints e campanhas' },
-  { id: 'devices',   label: 'Dispositivos',   icon: '📱', desc: 'Farm de iPhones' },
+  { id: 'devices',   label: 'Dispositivos',   icon: '🔧', desc: 'Farm de iPhones' },
 ];
 
 type Props = { userEmail?: string | null; userId?: string | null };
@@ -32,13 +34,14 @@ export default function AppShell({ userEmail, userId }: Props) {
 
   const Screen = () => {
     switch (active) {
-      case 'overview': return <OverviewScreen userId={userId} />;
-      case 'models':   return <ModelsScreen   userId={userId} />;
-      case 'team':     return <TeamScreen     userId={userId} />;
-      case 'todos':    return <TodoScreen     userId={userId} />;
-      case 'finance':  return <BillingScreen  userId={userId} selectedMonth="Jan" />;
-      case 'content':  return <ContentScreen  userId={userId} />;
-      case 'devices':  return <DevicesScreen  userId={userId} />;
+      case 'overview':  return <OverviewScreen  userId={userId} />;
+      case 'models':    return <ModelsScreen    userId={userId} />;
+      case 'accounts':  return <AccountsScreen  userId={userId} />;
+      case 'team':      return <TeamScreen      userId={userId} />;
+      case 'todos':     return <TodoScreen      userId={userId} />;
+      case 'finance':   return <BillingScreen   userId={userId} selectedMonth="Jan" />;
+      case 'content':   return <ContentScreen   userId={userId} />;
+      case 'devices':   return <DevicesScreen   userId={userId} />;
     }
   };
 

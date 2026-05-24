@@ -6,7 +6,7 @@ import {
 import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { C } from '../theme';
-import type { ModelAccount } from './ModelsScreen';
+import type { Model } from './ModelsScreen';
 
 type KPIs = { views?: number; ppvsSold?: number; conversionRate?: number; goldenRatio?: number };
 
@@ -42,7 +42,7 @@ export default function TeamScreen({ userId }: Props) {
   const isWide = width >= 780;
 
   const [items,   setItems]   = useState<TeamMember[]>([]);
-  const [models,  setModels]  = useState<ModelAccount[]>([]);
+  const [models,  setModels]  = useState<Model[]>([]);
   const [loading, setLoading] = useState(false);
   const [modal,   setModal]   = useState(false);
   const [editing, setEditing] = useState<TeamMember | null>(null);
@@ -60,7 +60,7 @@ export default function TeamScreen({ userId }: Props) {
       getDocs(collection(db, 'users', userId, 'models')),
     ]).then(([t, m]) => {
       setItems(t.docs.map(d => ({ id: d.id, ...d.data() } as TeamMember)));
-      setModels(m.docs.map(d => ({ id: d.id, ...d.data() } as ModelAccount)));
+      setModels(m.docs.map(d => ({ id: d.id, ...d.data() } as Model)));
     }).finally(() => setLoading(false));
   }, [userId]);
 
@@ -116,7 +116,7 @@ export default function TeamScreen({ userId }: Props) {
   };
 
   const getMemberName = (id: string) => items.find(i => i.id === id)?.name ?? '—';
-  const getModelName  = (id: string) => models.find(m => m.id === id)?.modelName ?? '—';
+  const getModelName  = (id: string) => models.find(m => m.id === id)?.name ?? '—';
   const totalPayroll  = items.reduce((s, i) => s + (Number(i.monthlyPay) || 0), 0);
 
   return (
@@ -253,7 +253,7 @@ export default function TeamScreen({ userId }: Props) {
                       </Pressable>
                       {models.map(mdl => (
                         <Pressable key={mdl.id} style={[mo.chip, form.assignedModelId === mdl.id && mo.chipActive]} onPress={() => set('assignedModelId', mdl.id)}>
-                          <Text style={[mo.chipText, form.assignedModelId === mdl.id && mo.chipTextActive]}>{mdl.modelName}</Text>
+                          <Text style={[mo.chipText, form.assignedModelId === mdl.id && mo.chipTextActive]}>{mdl.name}</Text>
                         </Pressable>
                       ))}
                     </View>

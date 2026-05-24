@@ -34,8 +34,13 @@ service cloud.firestore {
         allow read, write: if request.auth.uid == userId;
       }
 
-      // Módulo 1 — Model Account Manager
+      // Módulo 1 — Perfis das modelos (pessoas)
       match /models/{document=**} {
+        allow read, write: if request.auth.uid == userId;
+      }
+
+      // Módulo 1b — Contas de redes sociais (vinculadas às modelos)
+      match /accounts/{document=**} {
         allow read, write: if request.auth.uid == userId;
       }
 

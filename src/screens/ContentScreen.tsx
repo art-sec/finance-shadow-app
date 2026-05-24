@@ -6,7 +6,7 @@ import {
 import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase/config';
 import { C } from '../theme';
-import type { ModelAccount } from './ModelsScreen';
+import type { Model } from './ModelsScreen';
 
 type ContentPlan = {
   id: string; modelId: string; title: string; sprintType: string;
@@ -34,7 +34,7 @@ export default function ContentScreen({ userId }: Props) {
   const isWide = width >= 780;
 
   const [items,      setItems]      = useState<ContentPlan[]>([]);
-  const [models,     setModels]     = useState<ModelAccount[]>([]);
+  const [models,     setModels]     = useState<Model[]>([]);
   const [loading,    setLoading]    = useState(false);
   const [modal,      setModal]      = useState(false);
   const [editing,    setEditing]    = useState<ContentPlan | null>(null);
@@ -52,7 +52,7 @@ export default function ContentScreen({ userId }: Props) {
       getDocs(collection(db, 'users', userId, 'models')),
     ]).then(([c, m]) => {
       setItems(c.docs.map(d => ({ id: d.id, ...d.data() } as ContentPlan)));
-      setModels(m.docs.map(d => ({ id: d.id, ...d.data() } as ModelAccount)));
+      setModels(m.docs.map(d => ({ id: d.id, ...d.data() } as Model)));
     }).finally(() => setLoading(false));
   }, [userId]);
 
@@ -88,7 +88,7 @@ export default function ContentScreen({ userId }: Props) {
     } catch {}
   };
 
-  const getModelName = (id: string) => models.find(m => m.id === id)?.modelName ?? '—';
+  const getModelName = (id: string) => models.find(m => m.id === id)?.name ?? '—';
 
   const filtered = filterModel ? items.filter(i => i.modelId === filterModel) : items;
   const active   = items.filter(i => i.status === 'active').length;
@@ -117,7 +117,7 @@ export default function ContentScreen({ userId }: Props) {
           </Pressable>
           {models.map(mdl => (
             <Pressable key={mdl.id} style={[s.filterChip, filterModel === mdl.id && s.filterChipActive]} onPress={() => setFilterModel(mdl.id)}>
-              <Text style={[s.filterText, filterModel === mdl.id && s.filterTextActive]}>{mdl.modelName}</Text>
+              <Text style={[s.filterText, filterModel === mdl.id && s.filterTextActive]}>{mdl.name}</Text>
             </Pressable>
           ))}
         </ScrollView>
@@ -193,7 +193,7 @@ export default function ContentScreen({ userId }: Props) {
                   </Pressable>
                   {models.map(mdl => (
                     <Pressable key={mdl.id} style={[mo.chip, form.modelId === mdl.id && mo.chipActive]} onPress={() => set('modelId', mdl.id)}>
-                      <Text style={[mo.chipText, form.modelId === mdl.id && mo.chipTextActive]}>{mdl.modelName}</Text>
+                      <Text style={[mo.chipText, form.modelId === mdl.id && mo.chipTextActive]}>{mdl.name}</Text>
                     </Pressable>
                   ))}
                 </View>

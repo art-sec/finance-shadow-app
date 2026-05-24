@@ -22,7 +22,7 @@ import {
 import { db } from '../firebase/config';
 import { C } from '../theme';
 import { generatePassword } from '../utils/password';
-import type { ModelAccount } from './ModelsScreen';
+import type { ModelAccount } from './AccountsScreen';
 
 type Device = {
   id: string;
@@ -69,7 +69,7 @@ export default function DevicesScreen({ userId }: Props) {
     setLoading(true);
     Promise.all([
       getDocs(collection(db, 'users', userId, 'devices')),
-      getDocs(collection(db, 'users', userId, 'models')),
+      getDocs(collection(db, 'users', userId, 'accounts')),
     ]).then(([devSnap, modSnap]) => {
       setItems(devSnap.docs.map(d => ({ id: d.id, ...d.data() } as Device)));
       setModels(modSnap.docs.map(d => ({ id: d.id, ...d.data() } as ModelAccount)));
