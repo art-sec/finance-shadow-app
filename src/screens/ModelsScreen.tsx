@@ -4,9 +4,29 @@ import {
   StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '../firebase/config';
+import { db } from '../firebase/config';
 import { C } from '../theme';
+
+// Comprime e converte imagem para base64 (evita CORS do Storage)
+function compressImage(file: File, maxPx = 240, quality = 0.75): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = document.createElement('img');
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const ratio = Math.min(maxPx / img.width, maxPx / img.height, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width  = Math.round(img.width  * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas error')); return; }
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Erro ao ler imagem')); };
+    img.src = url;
+  });
+}
 
 export type Model = {
   id: string;
@@ -76,10 +96,7 @@ export default function ModelsScreen({ userId }: Props) {
     try {
       let photoUrl = form.photoUrl;
       if (fileObj) {
-        const path = `users/${userId}/models/${Date.now()}_${fileObj.name}`;
-        const sRef = storageRef(storage, path);
-        await uploadBytes(sRef, fileObj);
-        photoUrl = await getDownloadURL(sRef);
+        photoUrl = await compressImage(fileObj);
       }
       const data = { ...form, photoUrl };
       if (editing) {
