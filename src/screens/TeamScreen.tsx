@@ -81,12 +81,14 @@ export default function TeamScreen({ userId }: Props) {
   const flash = (m: string, t: 'ok' | 'err') => { setMsgType(t); setMsg(m); setTimeout(() => setMsg(''), 3000); };
   const set = (k: keyof Omit<TeamMember, 'id' | 'kpis'>, v: string | number) => setForm(f => ({ ...f, [k]: v }));
 
-  const buildKpis = (): KPIs => ({
-    views:          kpiStr.views          ? Number(kpiStr.views)          : undefined,
-    ppvsSold:       kpiStr.ppvsSold       ? Number(kpiStr.ppvsSold)       : undefined,
-    conversionRate: kpiStr.conversionRate ? Number(kpiStr.conversionRate) : undefined,
-    goldenRatio:    kpiStr.goldenRatio    ? Number(kpiStr.goldenRatio)    : undefined,
-  });
+  const buildKpis = (): KPIs => {
+    const kpis: KPIs = {};
+    if (kpiStr.views)          kpis.views          = Number(kpiStr.views);
+    if (kpiStr.ppvsSold)       kpis.ppvsSold       = Number(kpiStr.ppvsSold);
+    if (kpiStr.conversionRate) kpis.conversionRate = Number(kpiStr.conversionRate);
+    if (kpiStr.goldenRatio)    kpis.goldenRatio    = Number(kpiStr.goldenRatio);
+    return kpis;
+  };
 
   const handleSave = async () => {
     if (!userId) return;
@@ -401,7 +403,11 @@ const mo = StyleSheet.create({
   fieldWrap:    { flex: 1, minWidth: '44%', gap: 6 },
   fieldLabel:   { fontSize: 11, fontWeight: '700', color: C.text2, letterSpacing: 0.3 },
   fieldInput:   { height: 42, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgInput, paddingHorizontal: 12, fontSize: 14, color: C.text1 },
-  fieldFocused: { borderColor: C.primary, /* @ts-ignore */ boxShadow: '0 0 0 3px rgba(124,92,255,0.15)' },
+  fieldFocused: {
+    borderColor: C.primary,
+    // @ts-ignore
+    boxShadow: '0 0 0 3px rgba(124,92,255,0.15)',
+  },
   chip:          { paddingHorizontal: 11, paddingVertical: 6, borderRadius: 8, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgInput },
   chipActive:    { backgroundColor: C.primaryBg, borderColor: C.primary },
   chipText:      { fontSize: 12, fontWeight: '600', color: C.text2 },
