@@ -10,6 +10,7 @@ import {
   useWindowDimensions,
 } from 'react-native';
 import { collection, doc, getDocs, serverTimestamp, setDoc } from 'firebase/firestore';
+import { formatCurrency as fmt } from '../utils/finance';
 import { db } from '../firebase/config';
 import { LineChart } from '../components';
 import MetricCard   from '../components/MetricCard';
@@ -46,10 +47,19 @@ export default function OverviewScreen({ userId }: Props) {
   const [formErrors,    setFormErrors]    = useState<Partial<Record<keyof MonthlyData, string>>>({});
   const [reloadTrigger, setReloadTrigger] = useState(0);
 
-  const [fField,  setFField]  = useState('');
-  const [aField,  setAField]  = useState('');
-  const [rField,  setRField]  = useState('');
-  const [fnField, setFnField] = useState('');
+  const [fField,      setFField]      = useState('');
+  const [aField,      setAField]      = useState('');
+  const [rField,      setRField]      = useState('');
+  const [teamPayroll, setTeamPayroll] = useState(0);
+
+  // Busca folha da equipe automaticamente
+  useEffect(() => {
+    if (!userId) return;
+    getDocs(collection(db, 'users', userId, 'team')).then(snap => {
+      const total = snap.docs.reduce((s, d) => s + (Number(d.data().monthlyPay) || 0), 0);
+      setTeamPayroll(total);
+    }).catch(() => {});
+  }, [userId]);
 
   useEffect(() => {
     if (!userId) return;
@@ -88,10 +98,9 @@ export default function OverviewScreen({ userId }: Props) {
   const previous = useMemo(() => monthIdx > 0 ? monthlyData[monthIdx - 1] : null, [monthlyData, monthIdx]);
 
   useEffect(() => {
-    setFField(current.faturamento    > 0 ? String(current.faturamento)    : '');
-    setAField(current.anuncios       > 0 ? String(current.anuncios)       : '');
+    setFField(current.faturamento     > 0 ? String(current.faturamento)    : '');
+    setAField(current.anuncios        > 0 ? String(current.anuncios)       : '');
     setRField(current.retornoAnuncios > 0 ? String(current.retornoAnuncios) : '');
-    setFnField(current.funcionarios  > 0 ? String(current.funcionarios)   : '');
     setFormErrors({});
     setSaveMessage('');
   }, [selectedMonth]);
@@ -115,10 +124,10 @@ export default function OverviewScreen({ userId }: Props) {
     if (!userId) return;
     const updated: MonthlyData = {
       ...current,
-      faturamento:    Number(fField)  || 0,
-      anuncios:       Number(aField)  || 0,
-      retornoAnuncios:Number(rField)  || 0,
-      funcionarios:   Number(fnField) || 0,
+      faturamento:     Number(fField) || 0,
+      anuncios:        Number(aField) || 0,
+      retornoAnuncios: Number(rField) || 0,
+      funcionarios:    teamPayroll,          // auto da equipe
     };
     const errors = validateMonthlyData(updated);
     setFormErrors(errors);
@@ -205,10 +214,14 @@ export default function OverviewScreen({ userId }: Props) {
 
       <SectionBlock title={`Editar dados — ${selectedMonth}`} subtitle="Valores em Reais (R$)">
         <View style={[s.formGrid, isWide && s.formGridWide]}>
-          <OField label="Faturamento"           value={fField}  onChange={setFField}  error={formErrors.faturamento} />
-          <OField label="Gasto com Anúncios"    value={aField}  onChange={setAField}  error={formErrors.anuncios} />
-          <OField label="Retorno dos Anúncios"  value={rField}  onChange={setRField}  error={formErrors.retornoAnuncios} />
-          <OField label="Gasto c/ Funcionários" value={fnField} onChange={setFnField} error={formErrors.funcionarios} />
+          <OField label="Faturamento"          value={fField} onChange={setFField} error={formErrors.faturamento} />
+          <OField label="Gasto com Anúncios"   value={aField} onChange={setAField} error={formErrors.anuncios} />
+          <OField label="Retorno dos Anúncios" value={rField} onChange={setRField} error={formErrors.retornoAnuncios} />
+        </View>
+        {/* Folha da equipe — automático */}
+        <View style={s.teamPayrollRow}>
+          <Text style={s.teamPayrollLabel}>👥 Folha da equipe (automático)</Text>
+          <Text style={s.teamPayrollValue}>{fmt(teamPayroll)}/mês</Text>
         </View>
         {saveMessage ? (
           <View style={[s.msgBanner, saveMsgType === 'ok' ? s.msgOk : s.msgErr]}>
@@ -290,6 +303,9 @@ const s = StyleSheet.create({
   chartCellWide:  { width: '50%', borderRightWidth: 1, borderRightColor: C.border },
   formGrid:       { flexDirection: 'row', flexWrap: 'wrap', gap: 14, marginBottom: 16 },
   formGridWide:   {},
+  teamPayrollRow:   { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: C.bgElevated, borderRadius: 10, borderWidth: 1, borderColor: C.border, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16 },
+  teamPayrollLabel: { fontSize: 13, fontWeight: '600', color: C.text2 },
+  teamPayrollValue: { fontSize: 14, fontWeight: '800', color: C.amber },
   msgBanner:  { borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14, borderWidth: 1 },
   msgOk:      { backgroundColor: C.greenBg, borderColor: C.green },
   msgErr:     { backgroundColor: C.redBg,   borderColor: C.red   },
