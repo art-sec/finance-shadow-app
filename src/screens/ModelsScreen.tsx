@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Modal, Pressable, ScrollView,
+  ActivityIndicator, Image, Modal, Pressable, ScrollView,
   StyleSheet, Text, TextInput, View, useWindowDimensions,
 } from 'react-native';
 import { addDoc, collection, deleteDoc, doc, getDocs, serverTimestamp, updateDoc } from 'firebase/firestore';
-import { db } from '../firebase/config';
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { db, storage } from '../firebase/config';
 import { C } from '../theme';
 
 export type Model = {
@@ -13,11 +14,12 @@ export type Model = {
   realName: string;    // nome real
   birthDate: string;
   nationality: string;
+  photoUrl: string;
   notes: string;
 };
 
 const EMPTY: Omit<Model, 'id'> = {
-  name: '', realName: '', birthDate: '', nationality: '', notes: '',
+  name: '', realName: '', birthDate: '', nationality: '', photoUrl: '', notes: '',
 };
 
 type Props = { userId?: string | null };
@@ -26,15 +28,18 @@ export default function ModelsScreen({ userId }: Props) {
   const { width } = useWindowDimensions();
   const isWide = width >= 780;
 
-  const [items,   setItems]   = useState<Model[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [modal,   setModal]   = useState(false);
-  const [editing, setEditing] = useState<Model | null>(null);
-  const [form,    setForm]    = useState<Omit<Model, 'id'>>(EMPTY);
-  const [saving,  setSaving]  = useState(false);
-  const [msg,     setMsg]     = useState('');
-  const [msgType, setMsgType] = useState<'ok' | 'err'>('ok');
-  const [filter,  setFilter]  = useState('');
+  const [items,    setItems]    = useState<Model[]>([]);
+  const [loading,  setLoading]  = useState(false);
+  const [modal,    setModal]    = useState(false);
+  const [editing,  setEditing]  = useState<Model | null>(null);
+  const [form,     setForm]     = useState<Omit<Model, 'id'>>(EMPTY);
+  const [saving,   setSaving]   = useState(false);
+  const [msg,      setMsg]      = useState('');
+  const [msgType,  setMsgType]  = useState<'ok' | 'err'>('ok');
+  const [filter,   setFilter]   = useState('');
+  const [preview,  setPreview]  = useState('');
+  const [fileObj,  setFileObj]  = useState<File | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = async () => {
     if (!userId) return;
@@ -47,23 +52,42 @@ export default function ModelsScreen({ userId }: Props) {
 
   useEffect(() => { load(); }, [userId]);
 
-  const openAdd  = () => { setEditing(null); setForm(EMPTY); setModal(true); };
-  const openEdit = (item: Model) => { setEditing(item); setForm({ ...item }); setModal(true); };
-  const closeModal = () => { setModal(false); setMsg(''); };
+  const openAdd = () => {
+    setEditing(null); setForm(EMPTY); setPreview(''); setFileObj(null); setModal(true);
+  };
+  const openEdit = (item: Model) => {
+    setEditing(item); setForm({ ...item }); setPreview(item.photoUrl || ''); setFileObj(null); setModal(true);
+  };
+  const closeModal = () => { setModal(false); setMsg(''); setPreview(''); setFileObj(null); };
   const flash = (m: string, t: 'ok' | 'err') => { setMsgType(t); setMsg(m); setTimeout(() => setMsg(''), 3000); };
   const set = (k: keyof Omit<Model, 'id'>, v: string) => setForm(f => ({ ...f, [k]: v }));
+
+  const handleFilePick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setFileObj(file);
+    setPreview(URL.createObjectURL(file));
+  };
 
   const handleSave = async () => {
     if (!userId) return;
     if (!form.name.trim()) { flash('Nome artístico é obrigatório.', 'err'); return; }
     setSaving(true);
     try {
+      let photoUrl = form.photoUrl;
+      if (fileObj) {
+        const path = `users/${userId}/models/${Date.now()}_${fileObj.name}`;
+        const sRef = storageRef(storage, path);
+        await uploadBytes(sRef, fileObj);
+        photoUrl = await getDownloadURL(sRef);
+      }
+      const data = { ...form, photoUrl };
       if (editing) {
-        await updateDoc(doc(db, 'users', userId, 'models', editing.id), { ...form, updatedAt: serverTimestamp() });
-        setItems(prev => prev.map(i => i.id === editing.id ? { ...i, ...form } : i));
+        await updateDoc(doc(db, 'users', userId, 'models', editing.id), { ...data, updatedAt: serverTimestamp() });
+        setItems(prev => prev.map(i => i.id === editing.id ? { ...i, ...data } : i));
       } else {
-        const ref = await addDoc(collection(db, 'users', userId, 'models'), { ...form, createdAt: serverTimestamp() });
-        setItems(prev => [...prev, { id: ref.id, ...form }]);
+        const r = await addDoc(collection(db, 'users', userId, 'models'), { ...data, createdAt: serverTimestamp() });
+        setItems(prev => [...prev, { id: r.id, ...data }]);
       }
       flash(editing ? 'Modelo atualizada.' : 'Modelo adicionada.', 'ok');
       setTimeout(closeModal, 800);
@@ -132,14 +156,18 @@ export default function ModelsScreen({ userId }: Props) {
           ) : (
             filtered.map(item => (
               <View key={item.id} style={[s.card, isWide && s.cardWide]}>
-                <View style={s.avatar}>
-                  <Text style={s.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
-                </View>
+                {item.photoUrl ? (
+                  <Image source={{ uri: item.photoUrl }} style={s.avatarImg} />
+                ) : (
+                  <View style={s.avatar}>
+                    <Text style={s.avatarText}>{item.name.charAt(0).toUpperCase()}</Text>
+                  </View>
+                )}
                 <View style={s.cardBody}>
                   <Text style={s.cardName}>{item.name}</Text>
                   {item.realName ? <Text style={s.cardMeta}>Nome real: {item.realName}</Text> : null}
                   <View style={s.tagRow}>
-                    {item.birthDate ? <View style={s.tag}><Text style={s.tagText}>🎂 {item.birthDate}</Text></View> : null}
+                    {item.birthDate   ? <View style={s.tag}><Text style={s.tagText}>🎂 {item.birthDate}</Text></View>   : null}
                     {item.nationality ? <View style={s.tag}><Text style={s.tagText}>🌍 {item.nationality}</Text></View> : null}
                   </View>
                   {item.notes ? <Text style={s.cardNote} numberOfLines={2}>{item.notes}</Text> : null}
@@ -170,16 +198,42 @@ export default function ModelsScreen({ userId }: Props) {
               </Pressable>
             </View>
             <ScrollView style={mo.body} keyboardShouldPersistTaps="handled">
+
+              {/* Photo upload */}
+              <Text style={mo.sectionLabel}>Foto</Text>
+              <View style={mo.photoRow}>
+                {preview ? (
+                  <Image source={{ uri: preview }} style={mo.photoPreview} />
+                ) : (
+                  <View style={mo.photoPlaceholder}>
+                    <Text style={mo.photoPlaceholderText}>
+                      {form.name ? form.name.charAt(0).toUpperCase() : '?'}
+                    </Text>
+                  </View>
+                )}
+                <Pressable style={({ pressed }) => [mo.uploadBtn, pressed && { opacity: 0.8 }]} onPress={() => fileInputRef.current?.click()}>
+                  <Text style={mo.uploadBtnText}>📷 {preview ? 'Trocar foto' : 'Adicionar foto'}</Text>
+                </Pressable>
+                {/* @ts-ignore — web only file input */}
+                <input
+                  type="file"
+                  accept="image/*"
+                  style={{ display: 'none' }}
+                  ref={fileInputRef}
+                  onChange={handleFilePick}
+                />
+              </View>
+
               <Text style={mo.sectionLabel}>Identificação</Text>
               <View style={mo.grid}>
-                <MF label="Nome Artístico *" value={form.name}     onChange={(v: string) => set('name', v)}     placeholder="Ex: Sarah" />
-                <MF label="Nome Real"        value={form.realName} onChange={(v: string) => set('realName', v)} placeholder="Ex: Jessica Williams" />
+                <MF label="Nome Artístico *" value={form.name}     onChange={(v: string) => set('name', v)}     placeholder="Ex: Lara Flame" />
+                <MF label="Nome Real"        value={form.realName} onChange={(v: string) => set('realName', v)} placeholder="Ex: Júlia" />
               </View>
 
               <Text style={mo.sectionLabel}>Dados Pessoais</Text>
               <View style={mo.grid}>
                 <MF label="Data de Nascimento" value={form.birthDate}   onChange={(v: string) => set('birthDate', v)}   placeholder="DD/MM/AAAA" />
-                <MF label="Nacionalidade"      value={form.nationality} onChange={(v: string) => set('nationality', v)} placeholder="Ex: Brasileira, Americana" />
+                <MF label="Nacionalidade"      value={form.nationality} onChange={(v: string) => set('nationality', v)} placeholder="Ex: Brasileira" />
               </View>
 
               <Text style={mo.sectionLabel}>Notas</Text>
@@ -194,7 +248,10 @@ export default function ModelsScreen({ userId }: Props) {
               ) : null}
 
               <Pressable style={({ pressed }) => [mo.saveBtn, saving && mo.saveBtnDisabled, pressed && { opacity: 0.85 }]} onPress={handleSave} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={mo.saveBtnText}>{editing ? 'Salvar alterações' : 'Adicionar modelo'}</Text>}
+                {saving
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={mo.saveBtnText}>{editing ? 'Salvar alterações' : 'Adicionar modelo'}</Text>
+                }
               </Pressable>
             </ScrollView>
           </View>
@@ -258,17 +315,18 @@ const s = StyleSheet.create({
   emptyText: { fontSize: 17, fontWeight: '700', color: C.text1 },
   emptySub:  { fontSize: 13, color: C.text2, textAlign: 'center' },
 
-  card:     { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 14, gap: 14 },
-  cardWide: {},
-  avatar:   { width: 46, height: 46, borderRadius: 23, backgroundColor: C.primaryBg, borderWidth: 1, borderColor: C.primaryMid, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
-  avatarText: { fontSize: 20, fontWeight: '800', color: C.primary },
-  cardBody:  { flex: 1, gap: 4 },
-  cardName:  { fontSize: 15, fontWeight: '700', color: C.text1 },
-  cardMeta:  { fontSize: 12, color: C.text2 },
-  tagRow:    { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
-  tag:       { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: C.bgElevated, borderWidth: 1, borderColor: C.border },
-  tagText:   { fontSize: 11, color: C.text2, fontWeight: '600' },
-  cardNote:  { fontSize: 12, color: C.text3, marginTop: 2 },
+  card:        { flexDirection: 'row', alignItems: 'center', backgroundColor: C.bgCard, borderRadius: 14, borderWidth: 1, borderColor: C.border, padding: 14, gap: 14 },
+  cardWide:    {},
+  avatar:      { width: 52, height: 52, borderRadius: 26, backgroundColor: C.primaryBg, borderWidth: 2, borderColor: C.primaryMid, alignItems: 'center', justifyContent: 'center', flexShrink: 0 },
+  avatarImg:   { width: 52, height: 52, borderRadius: 26, flexShrink: 0 },
+  avatarText:  { fontSize: 22, fontWeight: '800', color: C.primary },
+  cardBody:    { flex: 1, gap: 4 },
+  cardName:    { fontSize: 15, fontWeight: '700', color: C.text1 },
+  cardMeta:    { fontSize: 12, color: C.text2 },
+  tagRow:      { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 },
+  tag:         { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 6, backgroundColor: C.bgElevated, borderWidth: 1, borderColor: C.border },
+  tagText:     { fontSize: 11, color: C.text2, fontWeight: '600' },
+  cardNote:    { fontSize: 12, color: C.text3, marginTop: 2 },
   cardActions: { flexDirection: 'row', gap: 6 },
   iconBtn:     { width: 34, height: 34, borderRadius: 9, borderWidth: 1, borderColor: C.border, alignItems: 'center', justifyContent: 'center', backgroundColor: C.bgElevated },
   iconBtnText: { fontSize: 15 },
@@ -276,7 +334,7 @@ const s = StyleSheet.create({
 
 const mo = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.80)', alignItems: 'center', justifyContent: 'center', padding: 20 },
-  box:     { width: '100%', maxWidth: 540, maxHeight: '90%', backgroundColor: C.bgCard, borderRadius: 20, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
+  box:     { width: '100%', maxWidth: 540, maxHeight: '92%', backgroundColor: C.bgCard, borderRadius: 20, borderWidth: 1, borderColor: C.border, overflow: 'hidden' },
   headerAccent: {
     height: 3,
     // @ts-ignore
@@ -290,8 +348,16 @@ const mo = StyleSheet.create({
   body:     { padding: 22 },
 
   sectionLabel: { fontSize: 10, fontWeight: '800', color: C.text3, letterSpacing: 1, textTransform: 'uppercase', marginBottom: 10, marginTop: 4 },
-  grid:         { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
-  fieldWrap:    { flex: 1, minWidth: '44%', gap: 6 },
+
+  photoRow:          { flexDirection: 'row', alignItems: 'center', gap: 16, marginBottom: 18 },
+  photoPreview:      { width: 72, height: 72, borderRadius: 36 },
+  photoPlaceholder:  { width: 72, height: 72, borderRadius: 36, backgroundColor: C.primaryBg, borderWidth: 2, borderColor: C.primaryMid, alignItems: 'center', justifyContent: 'center' },
+  photoPlaceholderText: { fontSize: 28, fontWeight: '800', color: C.primary },
+  uploadBtn:    { paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, borderWidth: 1, borderColor: C.primaryMid, backgroundColor: C.primaryBg },
+  uploadBtnText:{ fontSize: 13, fontWeight: '700', color: C.primary },
+
+  grid:      { flexDirection: 'row', gap: 12, marginBottom: 16, flexWrap: 'wrap' },
+  fieldWrap: { flex: 1, minWidth: '44%', gap: 6 },
   fieldLabel:   { fontSize: 11, fontWeight: '700', color: C.text2, letterSpacing: 0.3 },
   fieldInput:   { height: 42, borderRadius: 10, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgInput, paddingHorizontal: 12, fontSize: 14, color: C.text1 },
   fieldFocused: {

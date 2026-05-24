@@ -51,3 +51,10 @@ export const auth = getAuth(app);
  * Exemplo: doc(db, 'users', userId) para acessar documento do usuário
  */
 export const db = getFirestore(app);
+
+/**
+ * Exportar instância do Firebase Storage
+ * Usado para upload de fotos das modelos
+ */
+import { getStorage } from 'firebase/storage';
+export const storage = getStorage(app);

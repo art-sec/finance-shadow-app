@@ -391,8 +391,8 @@ const s = StyleSheet.create({
   search:     { flex: 1, height: 42, fontSize: 14, color: C.text1 },
   clearText:  { fontSize: 13, color: C.text3, fontWeight: '700', padding: 4 },
 
-  chipScroll: { paddingHorizontal: 16, marginTop: 10 },
-  chipRow:    { flexDirection: 'row', gap: 8, paddingBottom: 4 },
+  chipScroll: { paddingHorizontal: 16, marginTop: 10, flexGrow: 0 },
+  chipRow:    { flexDirection: 'row', gap: 8, paddingBottom: 4, alignItems: 'center' },
   chip:       { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, borderWidth: 1, borderColor: C.border, backgroundColor: C.bgCard },
   chipActive: { backgroundColor: C.primaryBg, borderColor: C.primary },
   chipText:   { fontSize: 12, fontWeight: '600', color: C.text2 },
