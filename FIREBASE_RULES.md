@@ -20,49 +20,51 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    // ── Dados do dono do workspace ───────────────────────────────────────────
     match /users/{userId} {
       allow read, write: if request.auth.uid == userId;
 
-      // Módulo 4 — Financeiro (existente)
-      match /finance/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
-      match /billing/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
-      match /subscriptions/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
+      match /finance/{document=**}       { allow read, write: if request.auth.uid == userId; }
+      match /billing/{document=**}       { allow read, write: if request.auth.uid == userId; }
+      match /subscriptions/{document=**} { allow read, write: if request.auth.uid == userId; }
+      match /models/{document=**}        { allow read, write: if request.auth.uid == userId; }
+      match /accounts/{document=**}      { allow read, write: if request.auth.uid == userId; }
+      match /team/{document=**}          { allow read, write: if request.auth.uid == userId; }
+      match /todos/{document=**}         { allow read, write: if request.auth.uid == userId; }
+      match /content/{document=**}       { allow read, write: if request.auth.uid == userId; }
+      match /devices/{document=**}       { allow read, write: if request.auth.uid == userId; }
+    }
 
-      // Módulo 1 — Perfis das modelos (pessoas)
-      match /models/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
+    // ── Sistema multi-usuário ────────────────────────────────────────────────
 
-      // Módulo 1b — Contas de redes sociais (vinculadas às modelos)
-      match /accounts/{document=**} {
-        allow read, write: if request.auth.uid == userId;
+    // Workspace gerenciado pelo dono — membros podem ler seus próprios dados
+    match /workspaces/{ownerId} {
+      match /members/{memberId} {
+        allow read:  if request.auth.uid == ownerId || request.auth.uid == memberId;
+        allow write: if request.auth.uid == ownerId;
       }
+      match /invites/{inviteId} {
+        allow read, write: if request.auth.uid == ownerId;
+      }
+    }
 
-      // Módulo 2 — VA & Team Management
-      match /team/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
+    // Acesso dos membros aos dados do workspace do dono
+    match /users/{ownerId}/{collection}/{document=**} {
+      allow read, write: if
+        request.auth != null &&
+        exists(/databases/$(database)/documents/workspaces/$(ownerId)/members/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/workspaces/$(ownerId)/members/$(request.auth.uid)).data.status == 'active';
+    }
 
-      // Módulo 3 — To-Do List
-      match /todos/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
+    // Lookup de membership de um usuário
+    match /userMemberships/{userId} {
+      allow read, write: if request.auth.uid == userId;
+    }
 
-      // Módulo 5 — Content HQ
-      match /content/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
-
-      // Módulo 6 — iPhone Tracker
-      match /devices/{document=**} {
-        allow read, write: if request.auth.uid == userId;
-      }
+    // Índice global de códigos de convite
+    match /inviteCodes/{code} {
+      allow read:  if request.auth != null;
+      allow write: if request.auth != null;
     }
 
     // Bloqueia tudo mais
@@ -81,65 +83,77 @@ service cloud.firestore {
 
 ---
 
-## Estrutura de Dados Esperada
-
-O aplicativo cria a seguinte estrutura no Firestore:
+## Estrutura de Dados
 
 ```
 users/
-  {userId}/
-    finance/         → Módulo 4: dados mensais agregados (Jan, Fev…)
-    billing/         → Módulo 4: gastos diários e assinaturas
+  {ownerUid}/
+    finance/         → Módulo Financeiro
+    billing/         → Assinaturas mensais
     subscriptions/   → legado (compatibilidade)
-    models/          → Módulo 1: contas das modelos
-    team/            → Módulo 2: membros da equipe e VAs
-    todos/           → Módulo 3: tarefas e lista de afazeres
-    content/         → Módulo 5: sprints e planos de conteúdo
-    devices/         → Módulo 6: iPhones e dispositivos
+    models/          → Perfis das modelos
+    accounts/        → Contas de redes sociais
+    team/            → Membros da equipe e VAs
+    todos/           → Tarefas
+    content/         → Sprints e planos de conteúdo
+    devices/         → iPhones e dispositivos
+
+workspaces/
+  {ownerUid}/
+    members/
+      {memberUid}/   → { uid, email, displayName, role, permissions[], status }
+    invites/
+      {inviteId}/    → { code, role, permissions[], maxUses, uses }
+
+userMemberships/
+  {memberUid}/       → { workspaceId (= ownerUid), role, joinedAt }
+
+inviteCodes/
+  {code}/            → { workspaceId, inviteId }   ← índice para lookup rápido
 ```
+
+---
+
+## Sistema de Convites
+
+### Como funciona:
+
+1. **Dono** vai em ⚙️ Configurações → cria um convite com cargo e permissões
+2. **Sistema** gera um código de 8 letras (ex: `AB12CD34`) e um link completo
+3. **Dono** copia o link e envia para o membro
+4. **Membro** acessa o link → vai direto para o cadastro com o código preenchido
+5. **Membro** cria sua conta → registrado automaticamente no workspace
+6. **Membro** faz login → vê apenas as abas que tem permissão
+
+### Roles disponíveis:
+
+| Cargo           | Permissões principais                        |
+|-----------------|----------------------------------------------|
+| 👑 Dono         | Tudo + gerencia workspace e configurações    |
+| 🏆 Gerente      | Tudo exceto editar financeiro               |
+| 📋 Account Mgr  | Overview, modelos, contas, tarefas, financeiro (leitura) |
+| 💬 Chatter      | Overview, contas (editar), tarefas           |
+| 🤝 VA           | Overview, contas (leitura), tarefas          |
+| 🎬 Content Mgr  | Overview, modelos, conteúdo, tarefas         |
 
 ---
 
 ## Troubleshooting
 
-### "Falha ao salvar no Firestore" ou "Sem permissão"
+### "Missing or insufficient permissions"
 
-**Causa**: As regras de segurança estão muito restritivas.
+**Causa**: As regras de segurança estão desatualizadas ou não foram publicadas.
 
-**Solução**: 
-- Verifique se as regras foram publicadas corretamente
-- Verifique se o `userId` no código corresponde ao `uid` retornado por `auth.currentUser.uid`
-- Tente fazer logout e login novamente
+**Solução**: Copie as regras acima e publique no Firebase Console → Firestore → Rules.
 
-### "Timeout ao salvar"
+### Membro não consegue acessar dados
 
-**Causa**: Conexão lenta ou Firestore não respondendo.
+**Causa**: A regra verifica `status == 'active'` no documento do membro.
 
-**Solução**:
-- Verifique sua conexão de internet
-- Verifique se o Firebase está funcionando (status.firebase.google.com)
-- Tente novamente em alguns minutos
+**Solução**: Verifique se o membro não está com `status: revoked` em Configurações.
 
-### Dados não aparecem após recarregar a página
+### Código de convite inválido no cadastro
 
-**Causa**: Dados não foram salvos no Firestore ou regra está bloqueando leitura.
+**Causa**: O código não existe na coleção `inviteCodes` ou já foi expirado.
 
-**Solução**:
-- Verifique o console (F12 > Console) para ver mensagens de erro
-- Tente salvar novamente
-- Verifique se as regras permitem leitura
-
----
-
-## Teste Rápido
-
-Para testar se tudo está funcionando:
-
-1. Faça login no aplicativo
-2. Mude o valor do mês selecionado
-3. Clique "Salvar mês"
-4. Você deve ver "✓ Dados salvos com sucesso."
-5. Recarregue a página (F5)
-6. Os dados devem voltar para o que você salvou
-
-Se não funcionar, verifique os erros no console (F12 > Console ou Network).
+**Solução**: Peça ao dono para criar um novo convite em Configurações.

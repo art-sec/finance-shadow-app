@@ -12,9 +12,13 @@ import {
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db } from '../firebase/config';
+import { acceptInvite } from '../contexts/WorkspaceContext';
 import { C } from '../theme';
 
-type Props = { onBackToLogin: () => void };
+type Props = {
+  onBackToLogin: () => void;
+  prefillInviteCode?: string;
+};
 
 const ERROR_MAP: Record<string, string> = {
   'auth/email-already-in-use': 'Email já está em uso.',
@@ -23,12 +27,15 @@ const ERROR_MAP: Record<string, string> = {
   'auth/network-request-failed': 'Sem conexão. Verifique sua internet.',
 };
 
-export default function RegisterScreen({ onBackToLogin }: Props) {
-  const [username, setUsername] = useState('');
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [loading, setLoading]   = useState(false);
-  const [error, setError]       = useState('');
+export default function RegisterScreen({ onBackToLogin, prefillInviteCode }: Props) {
+  const [username,    setUsername]    = useState('');
+  const [email,       setEmail]       = useState('');
+  const [password,    setPassword]    = useState('');
+  const [inviteCode,  setInviteCode]  = useState(prefillInviteCode ?? '');
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState('');
+
+  const hasInvite = inviteCode.trim().length > 0;
 
   const handleRegister = async () => {
     if (!username.trim() || !email.trim() || !password) {
@@ -38,12 +45,29 @@ export default function RegisterScreen({ onBackToLogin }: Props) {
     try {
       const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
       await updateProfile(cred.user, { displayName: username.trim() });
-      await setDoc(doc(db, 'users', cred.user.uid), {
-        uid: cred.user.uid,
-        username: username.trim(),
-        email: email.trim(),
-        createdAt: serverTimestamp(),
-      });
+
+      if (hasInvite) {
+        // Register as a workspace member via invite
+        const result = await acceptInvite(
+          inviteCode.trim().toUpperCase(),
+          cred.user.uid,
+          email.trim(),
+          username.trim(),
+        );
+        if (!result.success) {
+          // Still created the auth account; show warning but don't block
+          setError(`Conta criada, mas convite inválido: ${result.error ?? 'código não encontrado'}`);
+        }
+        // Don't write to /users — member data lives under workspace
+      } else {
+        // Register as workspace owner
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          uid: cred.user.uid,
+          username: username.trim(),
+          email: email.trim(),
+          createdAt: serverTimestamp(),
+        });
+      }
     } catch (err: any) {
       setError(ERROR_MAP[err?.code] ?? `Falha no cadastro. (${err?.code ?? 'erro desconhecido'})`);
     } finally {
@@ -67,7 +91,9 @@ export default function RegisterScreen({ onBackToLogin }: Props) {
               </View>
               <View>
                 <Text style={styles.cardTitle}>Criar conta</Text>
-                <Text style={styles.cardSub}>Junte-se ao Shadow OFM</Text>
+                <Text style={styles.cardSub}>
+                  {hasInvite ? '🔗 Entrando via convite de equipe' : 'Junte-se ao Shadow OFM'}
+                </Text>
               </View>
             </View>
 
@@ -75,6 +101,24 @@ export default function RegisterScreen({ onBackToLogin }: Props) {
               <Field label="Nome / Empresa" value={username} onChange={setUsername} placeholder="Seu nome" editable={!loading} />
               <Field label="Email" value={email} onChange={setEmail} placeholder="seu@email.com" keyboard="email-address" editable={!loading} />
               <Field label="Senha" value={password} onChange={setPassword} placeholder="Mínimo 6 caracteres" secure editable={!loading} />
+
+              {/* Invite code field */}
+              <View style={styles.inviteSection}>
+                <Field
+                  label="Código de convite (opcional)"
+                  value={inviteCode}
+                  onChange={(v: string) => setInviteCode(v.toUpperCase())}
+                  placeholder="Ex: AB12CD34"
+                  editable={!loading}
+                />
+                {hasInvite && (
+                  <View style={styles.inviteHint}>
+                    <Text style={styles.inviteHintText}>
+                      🔗 Você entrará como membro da equipe
+                    </Text>
+                  </View>
+                )}
+              </View>
 
               {error ? <View style={styles.errorBox}><Text style={styles.errorText}>{error}</Text></View> : null}
 
@@ -140,6 +184,9 @@ const styles = StyleSheet.create({
   cardTitle: { fontSize: 20, fontWeight: '800', color: C.text1, letterSpacing: -0.3 },
   cardSub:   { fontSize: 13, color: C.text2 },
   form: { paddingHorizontal: 28, paddingBottom: 28, paddingTop: 16, gap: 16 },
+  inviteSection: { gap: 6 },
+  inviteHint:    { backgroundColor: C.primaryBg, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 7, borderWidth: 1, borderColor: C.borderLt },
+  inviteHintText:{ fontSize: 12, color: C.primary, fontWeight: '600' },
   errorBox: { backgroundColor: C.redBg, borderWidth: 1, borderColor: C.red, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10 },
   errorText: { color: C.red, fontSize: 13, fontWeight: '500' },
   btn: { height: 50, borderRadius: 12, alignItems: 'center', justifyContent: 'center', /* @ts-ignore */ background: 'linear-gradient(135deg, #7C5CFF 0%, #4A2FC9 100%)', backgroundColor: C.primary },
