@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
   collection, doc, getDoc, getDocs, serverTimestamp,
-  setDoc, deleteDoc, addDoc,
+  setDoc, deleteDoc, addDoc, onSnapshot,
 } from 'firebase/firestore';
 import { db } from '../firebase/config';
 
@@ -150,61 +150,76 @@ export function WorkspaceProvider({ userId, children }: ProviderProps) {
 
   useEffect(() => {
     if (!userId) { setIsLoading(false); return; }
-    let mounted = true;
+
+    const unsubs: (() => void)[] = [];
+    setIsLoading(true);
 
     const init = async () => {
-      setIsLoading(true);
       try {
         // Check if this user is a member of another workspace
         const membershipDoc = await getDoc(doc(db, 'userMemberships', userId));
 
         if (membershipDoc.exists()) {
-          // This user is a MEMBER
+          // This user is a MEMBER — subscribe to own member doc for live permission updates
           const ms = membershipDoc.data();
           const wsId: string = ms.workspaceId;
-          const memberDoc = await getDoc(doc(db, 'workspaces', wsId, 'members', userId));
-          if (!mounted) return;
-          if (memberDoc.exists()) {
-            const md = memberDoc.data();
-            if (md.status === 'revoked') {
-              // Access revoked — treat as no workspace
-              setIsOwner(false);
-              setOwnerId(wsId);
-              setRole('revoked');
-              setPermissions([]);
-            } else {
-              setIsOwner(false);
-              setOwnerId(wsId);
-              setRole(md.role ?? 'va');
-              setPermissions(md.permissions ?? ROLE_PRESETS[md.role] ?? []);
-            }
-          }
+
+          const unsubMember = onSnapshot(
+            doc(db, 'workspaces', wsId, 'members', userId),
+            snap => {
+              if (!snap.exists()) return;
+              const md = snap.data();
+              if (md.status === 'revoked') {
+                setIsOwner(false);
+                setOwnerId(wsId);
+                setRole('revoked');
+                setPermissions([]);
+              } else {
+                setIsOwner(false);
+                setOwnerId(wsId);
+                setRole(md.role ?? 'va');
+                setPermissions(md.permissions ?? ROLE_PRESETS[md.role] ?? []);
+              }
+              setIsLoading(false);
+            },
+            e => { console.error('member onSnapshot', e); setIsLoading(false); }
+          );
+          unsubs.push(unsubMember);
+
         } else {
-          // This user is an OWNER
-          if (!mounted) return;
+          // This user is an OWNER — subscribe to members + invites for live updates
           setIsOwner(true);
           setOwnerId(userId);
           setRole('owner');
           setPermissions(ALL_PERMISSIONS);
 
-          // Load members and invites for settings screen
-          const [membersSnap, invitesSnap] = await Promise.all([
-            getDocs(collection(db, 'workspaces', userId, 'members')),
-            getDocs(collection(db, 'workspaces', userId, 'invites')),
-          ]);
-          if (!mounted) return;
-          setMembers(membersSnap.docs.map(d => ({ uid: d.id, ...d.data() } as WorkspaceMember)));
-          setInvites(invitesSnap.docs.map(d => ({ id: d.id, ...d.data() } as WorkspaceInvite)));
+          const unsubMembers = onSnapshot(
+            collection(db, 'workspaces', userId, 'members'),
+            snap => {
+              setMembers(snap.docs.map(d => ({ uid: d.id, ...d.data() } as WorkspaceMember)));
+              setIsLoading(false);
+            },
+            e => { console.error('members onSnapshot', e); setIsLoading(false); }
+          );
+
+          const unsubInvites = onSnapshot(
+            collection(db, 'workspaces', userId, 'invites'),
+            snap => {
+              setInvites(snap.docs.map(d => ({ id: d.id, ...d.data() } as WorkspaceInvite)));
+            },
+            e => console.error('invites onSnapshot', e)
+          );
+
+          unsubs.push(unsubMembers, unsubInvites);
         }
       } catch (e) {
         console.error('WorkspaceContext init error', e);
-      } finally {
-        if (mounted) setIsLoading(false);
+        setIsLoading(false);
       }
     };
 
     init();
-    return () => { mounted = false; };
+    return () => { unsubs.forEach(u => u()); };
   }, [userId, tick]);
 
   const hasPermission = (p: Permission | string) => {
